@@ -1,0 +1,44 @@
+name: Deploy to Google Apps Script
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - '.github/workflows/deploy-gas.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install clasp
+        run: npm install -g @google/clasp
+
+      - name: Write clasp credentials
+        run: |
+          cat > ~/.clasprc.json <<'EOF'
+          ${{ secrets.CLASPRC_JSON }}
+          EOF
+
+      - name: Write .clasp.json
+        run: |
+          cat > .clasp.json <<'EOF'
+          {
+            "scriptId": "${{ secrets.GAS_SCRIPT_ID }}",
+            "rootDir": "src"
+          }
+          EOF
+
+      - name: Push to Apps Script
+        run: clasp push -f
