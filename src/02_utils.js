@@ -139,3 +139,75 @@ function stripTags_(html) {
     .replace(/\s+/g, ' ')
     .trim();
 }
+
+
+function mustGetSheet_(name) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName(name);
+  if (!sh) throw new Error("sheet not found: " + name);
+  return sh;
+}
+
+function normalizeHeader_(h) {
+  return String(h).trim().toLowerCase();
+}
+
+function buildHeaderIndex_(headers) {
+  var map = {};
+  headers.forEach(function (h, i) {
+    map[normalizeHeader_(h)] = i;
+  });
+  return map;
+}
+
+function requireColumn_(index, name) {
+  var key = normalizeHeader_(name);
+  if (!(key in index)) {
+    throw new Error("missing column: " + name);
+  }
+  return index[key];
+}
+
+function toNumberOrNull_(v) {
+  if (v === "" || v === null) return null;
+  var n = Number(v);
+  return isNaN(n) ? null : n;
+}
+
+function isFiniteNumber_(v) {
+  return typeof v === "number" && isFinite(v);
+}
+
+function normalizeSheetDate_(v) {
+  if (v instanceof Date) return v;
+  return new Date(v);
+}
+
+function normalizeLooseDate_(v) {
+  if (v == null || v === '') return null;
+
+  if (Object.prototype.toString.call(v) === '[object Date]' && !isNaN(v.getTime())) {
+    return new Date(v.getFullYear(), v.getMonth(), v.getDate());
+  }
+
+  var s = String(v).trim();
+  if (!s) return null;
+
+  var m = s.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})$/);
+  if (m) {
+    return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  }
+
+  var d = new Date(s);
+  if (!isNaN(d.getTime())) {
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  }
+
+  return null;
+}
+
+function formatDateKey_(dateObj) {
+  return Utilities.formatDate(dateObj, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+}
+
+
