@@ -1,5 +1,5 @@
 /********************
- * 40_backfill.js
+ * 14_raw_backfill.js
  * 历史回补、断点续跑与派生表重建。
  ********************/
 
@@ -154,7 +154,7 @@ function backfillBatch_(startDate, endDate, maxDaysPerRun, resetCursor) {
  */
 function countCurveRows_() {
   var ss = SpreadsheetApp.getActive();
-  var sh = ss.getSheetByName(SHEET_CURVE);
+  var sh = ss.getSheetByName(SHEET_CURVE_RAW);
   if (!sh) return 0;
   return sh.getLastRow();
 }

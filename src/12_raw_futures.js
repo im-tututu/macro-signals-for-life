@@ -1,11 +1,14 @@
 /********************
-* 23_futures.gs
-* 国债期货模块：抓取 T0 / TF0 连续合约近似价格。
-********************/
+ * 12_raw_futures.js
+ * 国债期货原始行情抓取。
+ *
+ * 当前使用新浪接口抓取 T0 / TF0 连续合约近似价格，
+ * 结果写入原始期货表，供后续检查与扩展使用。
+ ********************/
 
 function fetchBondFutures_() {
   var ss = SpreadsheetApp.getActive();
-  var sheet = ss.getSheetByName(SHEET_FUT) || ss.insertSheet(SHEET_FUT);
+  var sheet = ss.getSheetByName(SHEET_FUTURES_RAW) || ss.insertSheet(SHEET_FUTURES_RAW);
 
   ensureFuturesHeader_(sheet);
 
@@ -56,6 +59,3 @@ function fetchSinaFuturePrice_(symbol) {
   return "";
 }
 
-/********************
-* 8) macro_dashboard：一屏终端
-********************/

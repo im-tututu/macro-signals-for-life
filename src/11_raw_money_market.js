@@ -1,5 +1,5 @@
 /********************
- * 22_money_market.js
+ * 11_raw_money_market.js
  *
  * 银行间质押式回购利率：
  * - 当天：prr-md.json（实时更新）
@@ -16,8 +16,8 @@
 /**
  * 避免与其他文件重复定义时直接覆盖
  */
-if (typeof SHEET_MM === "undefined") {
-  var SHEET_MM = "money_market";
+if (typeof SHEET_MONEY_MARKET_RAW === "undefined") {
+  var SHEET_MONEY_MARKET_RAW = "原始_资金面";
 }
 
 /**
@@ -382,9 +382,9 @@ function testMoneyMarketBackfill120() {
  */
 function getOrCreateMoneyMarketSheet_() {
   var ss = SpreadsheetApp.getActive();
-  var sheet = ss.getSheetByName(SHEET_MM);
+  var sheet = ss.getSheetByName(SHEET_MONEY_MARKET_RAW);
   if (!sheet) {
-    sheet = ss.insertSheet(SHEET_MM);
+    sheet = ss.insertSheet(SHEET_MONEY_MARKET_RAW);
   }
   ensureMoneyMarketHeader_(sheet);
   return sheet;

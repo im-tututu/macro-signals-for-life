@@ -1,5 +1,5 @@
 /********************
- * 10_chinabond_curve.js
+ * 10_raw_curve.js
  * 中债收益率曲线抓取、解析与落表。
  ********************/
 
@@ -8,7 +8,7 @@
  */
 function runDailyWide_(date) {
   var ss = SpreadsheetApp.getActive();
-  var sheet = ss.getSheetByName(SHEET_CURVE) || ss.insertSheet(SHEET_CURVE);
+  var sheet = ss.getSheetByName(SHEET_CURVE_RAW) || ss.insertSheet(SHEET_CURVE_RAW);
 
   ensureCurveHeader_(sheet);
 

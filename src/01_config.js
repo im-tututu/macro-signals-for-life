@@ -1,20 +1,29 @@
 /********************
  * 01_config.js
- * 集中定义 Sheet 名称、期限列表、曲线 ID 与信号阈值。
+ * 集中定义 Sheet 常量、期限列表、曲线 ID 与信号阈值。
  ********************/
 
-var SHEET_CURVE = '原始_收益率曲线';
-var SHEET_MM = '原始_资金面';
-var SHEET_FUT = '原始_国债期货';
+/** 原始数据表 */
+var SHEET_CURVE_RAW = '原始_收益率曲线';
+var SHEET_MONEY_MARKET_RAW = '原始_资金面';
+var SHEET_FUTURES_RAW = '原始_国债期货';
 
-var SHEET_HIST = '衍生_曲线历史';
-var SHEET_SLOPE = '衍生_曲线斜率';
+/** 汇总指标与信号表 */
+var SHEET_METRICS = '指标_利率';
+var SHEET_SIGNAL = '信号_利率';
 
-var SHEET_SIGNAL = '信号_ETF';
-var SHEET_ALLOC = '信号_债券配置';
+/**
+ * 兼容旧常量名：指标层已并表到 SHEET_METRICS。
+ */
+var SHEET_CURVE_HISTORY = SHEET_METRICS;
+var SHEET_CURVE_SLOPE = SHEET_METRICS;
+var SHEET_RATE_METRICS = SHEET_METRICS;
 
-var SHEET_DASH = '看板_利率总览';
-var SHEET_MACRO = '看板_宏观总览';
+/**
+ * 兼容旧常量名：信号层已并表到 SHEET_SIGNAL。
+ */
+var SHEET_ETF_SIGNAL = SHEET_SIGNAL;
+var SHEET_BOND_ALLOC_SIGNAL = SHEET_SIGNAL;
 
 /**
  * 固定期限列，单位为年。
