@@ -10,23 +10,24 @@ function buildCurveHistory_() {
 
   var dst = ss.getSheetByName(SHEET_HIST) || ss.insertSheet(SHEET_HIST);
 
-  dst.clearContents();
-  dst.appendRow(["date", "gov_1y", "gov_3y", "gov_5y", "gov_10y"]);
+  var values = src.getDataRange().getValues();
+  if (values.length < 2) return;
 
-  var data = src.getDataRange().getValues();
-  if (data.length < 2) return;
+  var header = values[0];
 
-  var header = data[0];
   var idxY1 = header.indexOf("Y_1");
   var idxY3 = header.indexOf("Y_3");
   var idxY5 = header.indexOf("Y_5");
   var idxY10 = header.indexOf("Y_10");
 
-  for (var i = 1; i < data.length; i++) {
-    var r = data[i];
+  var out = [];
+  out.push(["date", "gov_1y", "gov_3y", "gov_5y", "gov_10y"]);
+
+  for (var i = 1; i < values.length; i++) {
+    var r = values[i];
     if (r[1] !== "国债") continue;
 
-    dst.appendRow([
+    out.push([
       normYMD_(r[0]),
       idxY1 >= 0 ? r[idxY1] : "",
       idxY3 >= 0 ? r[idxY3] : "",
@@ -34,6 +35,9 @@ function buildCurveHistory_() {
       idxY10 >= 0 ? r[idxY10] : ""
     ]);
   }
+
+  dst.clearContents();
+  dst.getRange(1, 1, out.length, out[0].length).setValues(out);
 }
 
 
@@ -47,28 +51,33 @@ function buildCurveSlope_() {
 
   var dst = ss.getSheetByName(SHEET_SLOPE) || ss.insertSheet(SHEET_SLOPE);
 
-  dst.clearContents();
-  dst.appendRow(["date", "10Y-1Y", "10Y-3Y", "5Y-1Y"]);
+  var values = src.getDataRange().getValues();
+  if (values.length < 2) return;
 
-  var data = src.getDataRange().getValues();
-  if (data.length < 2) return;
+  var out = [];
+  out.push(["date", "10Y-1Y", "10Y-3Y", "5Y-1Y"]);
 
-  for (var i = 1; i < data.length; i++) {
-    var d = data[i][0];
-    var y1 = data[i][1];
-    var y3 = data[i][2];
-    var y5 = data[i][3];
-    var y10 = data[i][4];
+  for (var i = 1; i < values.length; i++) {
+    var r = values[i];
+
+    var d = r[0];
+    var y1 = r[1];
+    var y3 = r[2];
+    var y5 = r[3];
+    var y10 = r[4];
 
     if (y1 === "" || y10 === "") continue;
 
-    dst.appendRow([
+    out.push([
       normYMD_(d),
-      (y10 !== "" && y1 !== "") ? (y10 - y1) : "",
-      (y10 !== "" && y3 !== "") ? (y10 - y3) : "",
-      (y5 !== "" && y1 !== "") ? (y5 - y1) : ""
+      (y10 - y1),
+      (y10 - y3),
+      (y5 - y1)
     ]);
   }
+
+  dst.clearContents();
+  dst.getRange(1, 1, out.length, out[0].length).setValues(out);
 }
 
 
@@ -82,23 +91,27 @@ function buildETFSignal_() {
 
   var dst = ss.getSheetByName(SHEET_SIGNAL) || ss.insertSheet(SHEET_SIGNAL);
 
-  dst.clearContents();
-  dst.appendRow(["date", "10Y-1Y", "signal"]);
+  var values = src.getDataRange().getValues();
+  if (values.length < 2) return;
 
-  var data = src.getDataRange().getValues();
-  if (data.length < 2) return;
+  var out = [];
+  out.push(["date", "10Y-1Y", "signal"]);
 
-  for (var i = 1; i < data.length; i++) {
-    var d = data[i][0];
-    var steep = data[i][1];
+  for (var i = 1; i < values.length; i++) {
+    var r = values[i];
+
+    var steep = r[1];
     if (steep === "" || steep === null) continue;
 
     var sig = "中性";
     if (steep < SIGNAL_THRESHOLDS.steep_low) sig = "长债机会";
     else if (steep > SIGNAL_THRESHOLDS.steep_high) sig = "短债优先";
 
-    dst.appendRow([normYMD_(d), steep, sig]);
+    out.push([normYMD_(r[0]), steep, sig]);
   }
+
+  dst.clearContents();
+  dst.getRange(1, 1, out.length, out[0].length).setValues(out);
 }
 
 
