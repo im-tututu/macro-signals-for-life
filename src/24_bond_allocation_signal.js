@@ -144,14 +144,14 @@ function readCurveHistoryRows_(sheet) {
   var header = values[0];
   var idx = buildHeaderIndex_(header);
 
-  var dateCol  = idx['date'];
-  var gov1yCol = idx['gov_1y'];
-  var gov3yCol = idx['gov_3y'];
-  var gov5yCol = idx['gov_5y'];
-  var gov10yCol = idx['gov_10y'];
+  requireColumn_(idx, 'date');
+  requireColumn_(idx, 'gov_10y');
 
-  requireColumn_(dateCol,  'curve_history.date');
-  requireColumn_(gov10yCol, 'curve_history.gov_10y');
+  var dateCol   = idx['date'];
+  var gov1yCol  = idx['gov_1y'];
+  var gov3yCol  = idx['gov_3y'];
+  var gov5yCol  = idx['gov_5y'];
+  var gov10yCol = idx['gov_10y'];
 
   var rows = [];
 
@@ -187,11 +187,11 @@ function readCurveSlopeMap_(sheet) {
   var header = values[0];
   var idx = buildHeaderIndex_(header);
 
+  requireColumn_(idx, 'date');
+  requireColumn_(idx, '10Y-1Y');
+
   var dateCol = idx['date'];
   var slopeCol = idx['10y-1y'];
-
-  requireColumn_(dateCol, 'curve_slope.date');
-  requireColumn_(slopeCol, 'curve_slope.10Y-1Y');
 
   var map = {};
 
@@ -219,17 +219,17 @@ function readMoneyMarketDr007Map_(sheet) {
   var header = values[0];
   var idx = buildHeaderIndex_(header);
 
+  requireColumn_(idx, 'date');
+  requireColumn_(idx, 'DR007_weightedRate');
+
   var dateCol = idx['date'];
   var dr007Col = idx['dr007_weightedrate'];
-
-  requireColumn_(dateCol, 'money_market.date');
-  requireColumn_(dr007Col, 'money_market.DR007_weightedRate');
 
   var map = {};
 
   for (var i = 1; i < values.length; i++) {
     var r = values[i];
-    var dateObj = normalizeLooseDate_(r[dateCol]); // money_market 里可能是 yyyy-mm-dd 字符串
+    var dateObj = normalizeLooseDate_(r[dateCol]);
     var dr007 = toNumberOrNull_(r[dr007Col]);
     if (!dateObj || !isFiniteNumber_(dr007)) continue;
 
