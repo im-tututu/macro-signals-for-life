@@ -58,20 +58,34 @@ function runDailyWide_(date) {
 /**
  * 抓取中债收益率曲线原始 HTML，并使用脚本缓存减少重复请求。
  */
-function fetchChinaBondCurves_(date, ids) {
-  var cache = CacheService.getScriptCache();
-  var cacheKey = 'chinabond_' + date + '_' + ids.join('_');
-  var cached = cache.get(cacheKey);
-  if (cached) {
-    Logger.log('命中缓存: ' + cacheKey);
-    return cached;
-  }
+function buildShortCacheKey_(prefix, dateStr, ids) {
+  var raw = prefix + '|' + dateStr + '|' + ids.join(',');
+  var digest = Utilities.computeDigest(
+    Utilities.DigestAlgorithm.MD5,
+    raw,
+    Utilities.Charset.UTF_8
+  );
 
-  var url = 'https://yield.chinabond.com.cn/cbweb-mn/yc/ycDetail?ycDefIds=' + ids.join(',');
+  var hex = digest.map(function(b) {
+    var v = (b < 0 ? b + 256 : b).toString(16);
+    return v.length === 1 ? '0' + v : v;
+  }).join('');
+
+  return prefix + '_' + dateStr.replace(/-/g, '') + '_' + hex;
+}
+
+function fetchChinaBondCurves_(workTime, ycDefIds) {
+  var url = 'https://yield.chinabond.com.cn/cbweb-mn/yc/ycDetail';
+
+  var cache = CacheService.getScriptCache();
+  var cacheKey = buildShortCacheKey_('yc_detail', workTime, ycDefIds);
+  var cached = cache.get(cacheKey);
+  if (cached) return cached;
+
   var payload = {
-    ycDefIds: ids.join(','),
+    ycDefIds: ycDefIds.join(','),
     zblx: 'txy',
-    workTime: date,
+    workTime: workTime,
     dxbj: '0',
     qxlx: '0',
     yqqxN: 'N',
@@ -79,21 +93,24 @@ function fetchChinaBondCurves_(date, ids) {
     wrjxCBFlag: '0',
     locale: 'zh_CN'
   };
-  var options = {
+
+  var resp = UrlFetchApp.fetch(url, {
     method: 'post',
     payload: payload,
+    muteHttpExceptions: true,
     headers: {
-      'User-Agent': 'Mozilla/5.0',
-      Referer: 'https://yield.chinabond.com.cn/',
-      Origin: 'https://yield.chinabond.com.cn'
+      'User-Agent': 'Mozilla/5.0'
     }
-  };
+  });
 
-  var res = safeFetch_(url, options, 4);
-  var text = res.getContentText();
+  var code = resp.getResponseCode();
+  var text = resp.getContentText('UTF-8');
+
+  if (code !== 200) {
+    throw new Error('ycDetail 请求失败 code=' + code + ' body=' + text.slice(0, 500));
+  }
+
   cache.put(cacheKey, text, 21600);
-
-  Logger.log('ChinaBond HTTP=' + res.getResponseCode() + ' len=' + text.length);
   return text;
 }
 

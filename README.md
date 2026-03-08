@@ -1,6 +1,6 @@
 # Bond Market Terminal
 
-一个基于 Google Apps Script + Google Sheets 的债券市场监控项目。当前代码库已经收敛为：
+一个基于 Google Apps Script + Google Sheets 的债券市场监控项目。当前结构已经收敛为：
 
 - 原始数据层：收益率曲线、资金面、国债期货、债券指数
 - 指标层：统一利率指标宽表
@@ -22,28 +22,33 @@ bond-rate-terminal-main
 │  ├─ 14_raw_backfill.js
 │  ├─ 20_metrics.js
 │  └─ 21_signal.js
-├─ CHANGELOG.md
 ├─ README.md
-└─ TODO.md
+└─ appsscript.json
 ```
 
-## 分层结构
+## 数据流
 
-### 0x 基础层
-- `00_main.js`
-- `01_config.js`
-- `02_utils.js`
+```text
+原始_收益率曲线 ─┐
+                  ├─> 指标_利率 ──> 信号_利率
+原始_资金面   ────┘
+```
 
-### 1x 原始数据层
-- `10_raw_curve.js`
-- `11_raw_money_market.js`
-- `12_raw_futures.js`
-- `13_raw_bond_index.js`
-- `14_raw_backfill.js`
+## 主入口
 
-### 2x 指标与信号层
-- `20_metrics.js`
-- `21_signal.js`
+完整日更：
+
+```javascript
+runEnhancedSystem()
+```
+
+常用手工入口：
+
+- `rebuildAll_()`：只重建指标与信号
+- `buildMetrics_()`：只重建统一指标表
+- `buildSignal_()`：只重建统一信号表
+- `testBackfillSafe()`：最近 30 天安全回补
+- `resumeBackfillSafe()`：按游标继续回补
 
 ## 当前 Sheet 结构
 
@@ -58,41 +63,113 @@ bond-rate-terminal-main
 ### 信号表
 - `信号_利率`
 
-## 数据流
+## 指标表设计说明
 
-```text
-原始_收益率曲线 ─┐
-                  ├─> 指标_利率 ──> 信号_利率
-原始_资金面   ────┘
+### 设计原则
 
-原始_国债期货  ──────────────────> 市场观察辅助数据
-```
+- 先放关键点位
+- 再放期限结构与相对利差
+- 最后补 rolling 均线和分位数
+- 表按日期逆序输出，最新在最上面
 
-## 主入口
+### 指标口径说明
 
-执行完整日更：
+有些曲线并不覆盖 3Y / 5Y：
 
-```javascript
-runEnhancedSystem()
-```
+- `AA+信用` 当前主要覆盖到 `1Y`
+- `AAA+中票` 当前主要覆盖到 `1Y`
+- `AAA城投` 当前主要覆盖到 `1Y`
+- `AAA存单` 本来就主要使用 `1Y`
 
-当前顺序：
+因此指标表顺着源数据选代表期限，不强行把所有曲线都做成 `3Y / 5Y`。
 
-1. `runDailyWide_(today)`
-2. `fetchPledgedRepoRates_()`
-3. `fetchBondFutures_()`
-4. `rebuildAll_()`
-   - `buildMetrics_()`
-   - `buildSignal_()`
+### 指标_利率 主要字段含义
 
-## 常用手工入口
+#### 1) 利率基准点位
+- `gov_1y / gov_3y / gov_5y / gov_10y / gov_30y`：国债关键期限收益率
+- `cdb_3y / cdb_5y / cdb_10y`：国开债关键期限收益率
 
-- `runEnhancedSystem()`：完整日更
-- `rebuildAll_()`：只重建指标与信号
-- `buildMetrics_()`：只重建统一指标表
-- `buildSignal_()`：只重建统一信号表
-- `testBackfillSafe()`：从最近 30 天安全回补
-- `resumeBackfillSafe()`：按回补游标继续补数
+用途：看利率中枢、久期位置和超长端弹性。
+
+#### 2) 高等级信用与子类点位
+- `aaa_credit_1y / 3y / 5y`：AAA 信用收益率
+- `aa_plus_credit_1y`：AA+ 信用短端收益率
+- `aaa_plus_mtn_1y`：AAA+ 中票短端收益率
+- `aaa_mtn_1y / 3y / 5y`：AAA 中票收益率
+- `aaa_bank_bond_1y / 3y / 5y`：AAA 银行债收益率
+- `aaa_lgfv_1y`：AAA 城投短端收益率
+- `aaa_ncd_1y`：AAA 存单 1Y
+
+用途：观察高等级信用、信用下沉、银行负债成本与短端信用传导。
+
+#### 3) 期限结构
+- `gov_slope_10_1 = gov_10y - gov_1y`
+- `gov_slope_10_3 = gov_10y - gov_3y`
+- `gov_slope_30_10 = gov_30y - gov_10y`
+- `cdb_slope_10_3 = cdb_10y - cdb_3y`
+
+用途：判断曲线平坦/陡峭、长端与超长端性价比。
+
+#### 4) 政金 / 地方利差
+- `spread_cdb_gov_3y / 5y / 10y`：国开相对国债利差
+- `spread_local_gov_gov_5y / 10y`：地方债相对国债利差
+
+用途：判断国开债、地方债相对国债是偏贵还是偏便宜。
+
+#### 5) 高等级信用利差
+- `spread_aaa_credit_gov_1y / 3y / 5y`
+- `spread_aa_plus_vs_aaa_credit_1y`
+- `spread_aaa_plus_mtn_gov_1y`
+- `spread_aaa_mtn_vs_aaa_plus_mtn_1y`
+- `spread_aaa_credit_ncd_1y`
+- `spread_aaa_bank_vs_aaa_credit_1y / 3y / 5y`
+- `spread_aaa_lgfv_vs_aaa_credit_1y`
+
+用途：判断高等级信用性价比、信用下沉环境、中票分层、存单与信用的相对价值。
+
+#### 6) Rolling 指标
+- `gov_10y_ma20 / ma60 / ma120`
+- `gov_10y_pct250`
+- `spread_cdb_gov_10y_ma20 / pct250`
+- `spread_aaa_credit_gov_5y_ma20 / pct250`
+- `spread_aa_plus_vs_aaa_credit_1y_ma20 / pct250`
+- `aaa_ncd_1y_ma20 / pct250`
+
+用途：把“当前值”放到滚动历史里判断高低分位，而不是只看绝对数值。
+
+## 信号表设计说明
+
+### 信号_利率 主要字段含义
+
+#### 1) 久期信号
+- `signal_duration`：总久期判断
+- `signal_ultra_long`：30Y 是否占优
+- `signal_curve`：曲线平/陡/中性
+
+#### 2) 利率债相对价值
+- `signal_policy_bank`：国开 vs 国债
+- `signal_local_gov`：地方债 vs 国债
+
+#### 3) 信用信号
+- `signal_high_grade_credit`：高等级信用是否值得增配
+- `signal_credit_sink`：是否适合信用下沉
+- `signal_mtn_tier`：AAA 中票 vs AAA+ 中票
+- `signal_ncd_vs_credit`：短端信用 vs 存单
+
+#### 4) 环境判断
+- `view_funding`：资金偏松 / 中性 / 偏紧
+- `view_credit`：信用环境判断
+- `view_regime`：综合环境（防守 / 中性 / 债牛偏进攻）
+
+#### 5) 配置建议
+- `weight_long_duration`
+- `weight_mid_duration`
+- `weight_short_duration`
+- `weight_high_grade_credit`
+- `weight_credit_sink`
+- `weight_cash`
+
+说明：这是日常看盘用的建议权重，不是回测最优权重。
 
 ## 模块职责
 
@@ -103,7 +180,7 @@ runEnhancedSystem()
 抓取 Chinamoney 资金面数据（如 DR007），写入 `原始_资金面`。
 
 ### `12_raw_futures.js`
-抓取国债期货行情快照，写入 `原始_国债期货`。
+抓取国债期货快照，写入 `原始_国债期货`。
 
 ### `13_raw_bond_index.js`
 提供债券指数相关的抓取/查询辅助函数。
@@ -112,198 +189,7 @@ runEnhancedSystem()
 负责历史回补、断点续跑与批量补数调度。
 
 ### `20_metrics.js`
-从原始收益率曲线构建统一指标宽表 `指标_利率`。
+从 `原始_收益率曲线` 构建统一指标宽表 `指标_利率`。
 
 ### `21_signal.js`
-从统一指标表与原始资金面表构建统一信号表 `信号_利率`。
-
-## 表结构说明
-
-### 1. 原始_收益率曲线
-
-用途：存放中债收益率曲线原始抓取结果。
-
-主要字段：
-- `date`
-- `curve`
-- `Y_0 ... Y_50`
-
-说明：
-- 每个交易日通常会有多行，对应不同曲线：国债、国开债、AAA 信用、AA+ 信用。
-- `20_metrics.js` 会从该表抽取关键期限并计算利差/斜率。
-
-### 2. 原始_资金面
-
-用途：存放资金面抓取结果。
-
-主要字段（实际列可能更多）：
-- `date`
-- `DR001_weightedRate`
-- `DR007_weightedRate`
-- 其他回购期限相关字段
-
-说明：
-- `21_signal.js` 当前主要读取 `DR007_weightedRate`。
-
-### 3. 原始_国债期货
-
-用途：存放国债期货快照。
-
-常见字段：
-- `date`
-- `T0_last`
-- `TF0_last`
-- `source`
-- `fetched_at`
-
-说明：
-- 当前统一信号表暂未直接依赖该表，但它属于原始市场观察数据的一部分。
-
-### 4. 指标_利率
-
-用途：统一利率指标宽表，是当前项目唯一的指标主表。
-
-字段：
-- `date`
-- `gov_1y`
-- `gov_3y`
-- `gov_5y`
-- `gov_10y`
-- `cdb_10y`
-- `aaa_5y`
-- `slope_10_1`
-- `slope_10_3`
-- `slope_5_1`
-- `policy_spread`
-- `credit_spread`
-- `term_spread`
-
-字段说明：
-- `gov_*`：国债关键期限收益率
-- `cdb_10y`：国开债 10Y
-- `aaa_5y`：AAA 信用债 5Y
-- `slope_10_1`：`gov_10y - gov_1y`
-- `slope_10_3`：`gov_10y - gov_3y`
-- `slope_5_1`：`gov_5y - gov_1y`
-- `policy_spread`：`cdb_10y - gov_10y`
-- `credit_spread`：`aaa_5y - gov_5y`
-- `term_spread`：当前实现中等同于 `slope_10_1`
-
-### 5. 信号_利率
-
-用途：统一利率信号表，是当前项目唯一的信号主表。
-
-字段：
-- `date`
-- `etf_slope_10_1`
-- `etf_signal`
-- `10Y`
-- `MA120`
-- `pct250`
-- `slope10_1`
-- `dr007`
-- `credit_spread`
-- `funding_view`
-- `credit_view`
-- `regime`
-- `long_bond`
-- `mid_bond`
-- `short_bond`
-- `cash`
-- `comment`
-
-说明：
-- `etf_signal` 与 `bond_allocation_signal` 已并入本表。
-- 旧函数入口仍保留兼容包装，但底层输出已统一到本表。
-
-## 信号逻辑
-
-### 1. ETF 观察信号
-
-使用字段：
-- `slope_10_1`
-
-阈值来自 `SIGNAL_THRESHOLDS`：
-- `< steep_low` → `长债机会`
-- `> steep_high` → `短债优先`
-- 其余 → `中性`
-
-默认配置：
-- `steep_low = 0.20`
-- `steep_high = 1.00`
-
-### 2. 债券配置建议
-
-使用字段：
-- `10Y`
-- `MA120`
-- `pct250`
-- `slope10_1`
-- `dr007`
-- `credit_spread`
-
-核心思路：
-- 用 `MA120` 判断 10Y 相对均线位置
-- 用 `pct250` 判断 10Y 在历史中的相对高低
-- 用 `slope10_1` 判断曲线是否偏平
-- 用 `dr007` 做资金面过滤
-- 用 `credit_spread` 做信用环境提示
-
-当前 `regime` 输出：
-- `VERY_DEFENSIVE`
-- `DEFENSIVE`
-- `NEUTRAL`
-- `BUY_LONG_BOND`
-- `STRONG_BUY_LONG_BOND`
-
-历史样本不足时：
-- 若 `10Y / MA120 / pct250` 任一不足，则输出 `NEUTRAL`
-- `comment = 历史数据不足（MA120/PCT250未就绪），中性配置`
-
-### 3. 资金面与信用面补充说明
-
-`funding_view`：
-- `dr007 >= 1.90` → `资金偏紧`
-- `dr007 <= 1.60` → `资金偏松`
-- 其余 → `资金中性`
-
-`credit_view`：
-- `credit_spread >= 0.45` → `信用利差偏宽，信用债性价比改善`
-- `credit_spread <= 0.36` → `信用利差偏窄，信用保护垫较薄`
-- 其余 → `信用中性`
-
-## 结构调整说明
-
-当前版本已完成两层收敛：
-
-### 指标层收敛
-以下旧表逻辑已并入统一指标表：
-- 曲线历史
-- 曲线斜率
-- 利率总览 / 利差快照
-
-### 信号层收敛
-以下旧表逻辑已并入统一信号表：
-- ETF 观察信号
-- 债券配置建议
-
-旧入口函数仍保留为兼容包装，因此已有调用通常不需要全部重写。
-
-## 兼容入口
-
-虽然表结构已收敛，但以下旧入口函数仍保留：
-- `buildRateMetrics_()`
-- `buildCurveHistory_()`
-- `buildCurveSlope_()`
-- `buildETFSignal_()`
-- `buildBondAllocationSignal_()`
-
-它们最终都会落到统一表：
-- `指标_利率`
-- `信号_利率`
-
-## 当前设计取舍
-
-- 当前代码后缀统一保留为 `.js`，便于继续沿用现有 Apps Script / clasp 工作流。
-- 当前已移除宏观看板模块；如果后续确实需要，再从统一指标表/统一信号表派生新的展示页会更自然。
-- 国债期货抓取模块仍建议单独核查字段位次与合约代码，尤其是 `T0 / TF0` 连续代码。
+从 `指标_利率` 与 `原始_资金面` 构建统一信号表 `信号_利率`。
