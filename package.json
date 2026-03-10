@@ -1,0 +1,11 @@
+{
+  "name": "macro-signals-for-life",
+  "private": true,
+  "devDependencies": {
+    "@google/clasp": "^3.2.0"
+  },
+  "scripts": {
+    "gas:push": "clasp push -f",
+    "gas:status": "clasp status"
+  }
+}
