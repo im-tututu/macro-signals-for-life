@@ -8,12 +8,14 @@
  */
 function test() {
   runEnhancedSystem();
+  //buildSignal_();
 }
 
 /**
  * 主入口：抓取当日原始数据，并重建统一指标表与统一信号表。
  */
 function runEnhancedSystem() {
+  //var today = formatDate_("2026-03-09");
   var today = formatDate_(new Date());
 
   runDailyWide_(today);
