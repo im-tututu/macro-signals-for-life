@@ -51,4 +51,5 @@ jobs:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
           ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
         run: |
-          clasp run-function setApiKeysFromParams             --params "[\"${FRED_API_KEY}\",\"${ALPHA_VANTAGE_API_KEY}\"]"
+          PARAMS=$(node -e 'console.log(JSON.stringify([process.env.FRED_API_KEY, process.env.ALPHA_VANTAGE_API_KEY]))')
+          npx clasp run-function setApiKeysFromParams --params "$PARAMS"
