@@ -1,8 +1,14 @@
-name: Deploy GAS and Sync Secrets
+name: Deploy to Google Apps Script
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/deploy-gas.yml'
   workflow_dispatch:
 
 jobs:
@@ -10,49 +16,35 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 24
+          cache: npm
 
-      - name: Install clasp
-        run: npm install -g @google/clasp
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Write clasp credentials
+        run: |
+          cat > ~/.clasprc.json <<'EOF'
+          ${{ secrets.CLASPRC_JSON }}
+          EOF
 
       - name: Write .clasp.json
         run: |
-          cat > .clasp.json <<EOF
+          cat > .clasp.json <<'EOF'
           {
             "scriptId": "${{ secrets.GAS_SCRIPT_ID }}",
             "rootDir": "src"
           }
           EOF
 
-      - name: Write clasp credentials
-        run: |
-          mkdir -p "$HOME"
-          cat > "$HOME/.clasprc.json" <<EOF
-          {
-            "token": {
-              "access_token": "${{ secrets.CLASP_ACCESS_TOKEN }}",
-              "refresh_token": "${{ secrets.CLASP_REFRESH_TOKEN }}",
-              "scope": "https://www.googleapis.com/auth/script.projects https://www.googleapis.com/auth/script.deployments https://www.googleapis.com/auth/script.external_request https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/script.scriptapp https://www.googleapis.com/auth/drive",
-              "token_type": "Bearer",
-              "expiry_date": 4102444800000
-            },
-            "oauth2ClientSettings": {
-              "clientId": "${{ secrets.CLASP_CLIENT_ID }}",
-              "clientSecret": "${{ secrets.CLASP_CLIENT_SECRET }}",
-              "redirectUri": "http://localhost"
-            },
-            "isLocalCreds": false
-          }
-          EOF
-
-      - name: Push source to Apps Script
-        run: clasp push -f
+      - name: Push to Apps Script
+        run: npx clasp push -f
 
       - name: Sync external API keys to Script Properties
         env:
