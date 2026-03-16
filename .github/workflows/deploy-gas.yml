@@ -52,4 +52,4 @@ jobs:
           ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
         run: |
           PARAMS=$(node -e 'console.log(JSON.stringify([process.env.FRED_API_KEY, process.env.ALPHA_VANTAGE_API_KEY]))')
-          npx clasp run-function setApiKeysFromParams --params "$PARAMS"
+          npx -y @google/clasp run-function setApiKeysFromParams --params "$PARAMS"
