@@ -7,10 +7,12 @@
  * 手工测试入口：执行完整日更流程。
  */
 function test() {
+  rebuildSignalAndReview_();
   //runEnhancedSystem();
   
-  buildMetrics_();
-  buildSignal_();  
+  // buildMetrics_();
+  // buildSignal_();
+  // buildSignalReview_();
   //buildSignalRecent_(7);
 }
 
@@ -63,6 +65,16 @@ function resumeBackfillSafe() {
 function rebuildAll_() {
   buildMetrics_();
   buildSignal_();
+  SpreadsheetApp.flush();
+  Utilities.sleep(500);
+  buildSignalReview_();
+}
+
+function rebuildSignalAndReview_() {
+  buildSignal_();
+  SpreadsheetApp.flush();
+  Utilities.sleep(500);
+  buildSignalReview_();
 }
 
 /**

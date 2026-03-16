@@ -14,7 +14,19 @@ var SHEET_POLICY_RATE_RAW = "原始_政策利率";
 /** 汇总指标与信号表 */
 var SHEET_METRICS = '指标';
 var SHEET_SIGNAL = '信号';
+var SHEET_SIGNAL_MAIN = '信号-主要';
+var SHEET_SIGNAL_DETAIL = '信号-明细';
+var SHEET_SIGNAL_REVIEW = '信号-复盘';
 
+var HOUSEHOLD_BUCKET_BASELINE = {
+  cash: 15,
+  stable_fixed_income: 35,
+  active_fixed_income: 20,
+  hedge: 10,
+  risk: 20
+};
+
+var SIGNAL_REVIEW_HORIZONS = [20, 60, 120];
 
 
 /** 固定期限列，单位为年。 */

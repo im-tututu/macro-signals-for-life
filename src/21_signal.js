@@ -18,11 +18,12 @@
 var SIGNAL_THEME_ASSET_ALLOC = '资产配置';
 var SIGNAL_THEME_LIFE_INVEST = '生活投资';
 
+
 function buildSignal_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var metricsSheet = mustGetSheet_(ss, SHEET_METRICS);
-  var mainSheet = getOrCreateSheetByName_(ss, '信号-主要');
-  var detailSheet = getOrCreateSheetByName_(ss, '信号-明细');
+  var mainSheet = getOrCreateSheetByName_(ss, SHEET_SIGNAL_MAIN || '信号-主要');
+  var detailSheet = getOrCreateSheetByName_(ss, SHEET_SIGNAL_DETAIL || '信号-明细');
 
   var metricRows = readMetricsRowsV2_(metricsSheet);
   if (!metricRows.length) {
@@ -70,6 +71,20 @@ function buildSignal_() {
       creditSink,
       creditShortEnd
     );
+
+    var householdBuckets = buildHouseholdBuckets_(
+      liquidity,
+      ratesStrategy,
+      creditStrategy,
+      mortgageBackground,
+      housingBackground,
+      fxBackground,
+      usdAllocationBackground,
+      goldBackground,
+      commodityBackground,
+      alloc
+    );
+
     var householdAllocation = classifyHouseholdAllocationSignal_(
       ratesStrategy,
       creditStrategy,
@@ -78,8 +93,10 @@ function buildSignal_() {
       fxBackground,
       usdAllocationBackground,
       goldBackground,
-      commodityBackground
+      commodityBackground,
+      householdBuckets
     );
+
     var householdComment = buildHouseholdComment_(
       liquidity,
       ratesStrategy,
@@ -91,7 +108,8 @@ function buildSignal_() {
       goldBackground,
       commodityBackground,
       alloc,
-      householdAllocation
+      householdAllocation,
+      householdBuckets
     );
 
     mainRowsAsc.push([
@@ -107,6 +125,16 @@ function buildSignal_() {
       goldBackground.label,
       commodityBackground.label,
       householdAllocation.label,
+      householdBuckets.bucket_cash.signal.label,
+      householdBuckets.bucket_stable_fixed_income.signal.label,
+      householdBuckets.bucket_active_fixed_income.signal.label,
+      householdBuckets.bucket_hedge.signal.label,
+      householdBuckets.bucket_risk.signal.label,
+      householdBuckets.bucket_cash.target_pct,
+      householdBuckets.bucket_stable_fixed_income.target_pct,
+      householdBuckets.bucket_active_fixed_income.target_pct,
+      householdBuckets.bucket_hedge.target_pct,
+      householdBuckets.bucket_risk.target_pct,
       householdComment,
       alloc.alloc_rates_long,
       alloc.alloc_rates_mid,
@@ -140,6 +168,11 @@ function buildSignal_() {
       makeSignalDetail_(goldBackground, 'view_gold_background', 'hedge', '黄金背景', 'gold|gold_ma20|usd_cny_pct250|cn_us_10y_spread|cn_us_2y_spread|vix', 'weekly', 250),
       makeSignalDetail_(commodityBackground, 'view_commodity_background', 'macro', '顺周期商品背景', 'wti|brent|copper|vix|spx|nasdaq_100', 'weekly', 260),
       makeSignalDetail_(householdAllocation, 'view_household_allocation', 'household', '家庭资产桶建议', 'rates_strategy_tilt|credit_strategy_tilt|view_fx_background|view_gold_background|view_commodity_background', 'weekly', 270),
+      makeSignalDetail_(householdBuckets.bucket_cash.signal, 'bucket_cash_tilt', 'household', '活钱桶倾向', 'liquidity_regime|view_fx_background|view_household_allocation', 'weekly', 271),
+      makeSignalDetail_(householdBuckets.bucket_stable_fixed_income.signal, 'bucket_stable_fixed_income_tilt', 'household', '稳健固收桶倾向', 'rates_strategy_tilt|credit_strategy_tilt|view_household_allocation', 'weekly', 272),
+      makeSignalDetail_(householdBuckets.bucket_active_fixed_income.signal, 'bucket_active_fixed_income_tilt', 'household', '进取固收桶倾向', 'rates_strategy_tilt|credit_strategy_tilt|view_household_allocation', 'weekly', 273),
+      makeSignalDetail_(householdBuckets.bucket_hedge.signal, 'bucket_hedge_tilt', 'household', '对冲保值桶倾向', 'view_fx_background|view_usd_allocation_background|view_gold_background', 'weekly', 274),
+      makeSignalDetail_(householdBuckets.bucket_risk.signal, 'bucket_risk_tilt', 'household', '风险资产桶倾向', 'view_housing_background|view_commodity_background|view_fx_background', 'weekly', 275),
       makeSignalDetail_(makeSignalResult_(householdComment, 'note', 0, 'neutral', 'low', householdComment), 'comment_household', 'household', '家庭配置说明', 'multiple', 'weekly', 280)
     ]);
   }
@@ -151,9 +184,11 @@ function buildSignal_() {
   writeSignalDetailSheet_(detailSheet, detailRowsDesc);
 }
 
+
 function buildETFSignal_() { buildSignal_(); }
 function runBondAllocationSignal_() { buildSignal_(); }
 function buildBondAllocationSignal_() { buildSignal_(); }
+
 
 function writeSignalMainSheet_(sheet, rows) {
   var header = [[
@@ -169,6 +204,16 @@ function writeSignalMainSheet_(sheet, rows) {
     'view_gold_background',
     'view_commodity_background',
     'view_household_allocation',
+    'bucket_cash_tilt',
+    'bucket_stable_fixed_income_tilt',
+    'bucket_active_fixed_income_tilt',
+    'bucket_hedge_tilt',
+    'bucket_risk_tilt',
+    'bucket_cash',
+    'bucket_stable_fixed_income',
+    'bucket_active_fixed_income',
+    'bucket_hedge',
+    'bucket_risk',
     'comment_household',
     'alloc_rates_long',
     'alloc_rates_mid',
@@ -185,11 +230,14 @@ function writeSignalMainSheet_(sheet, rows) {
   if (rows.length > 0) {
     sheet.getRange(2, 1, rows.length, rows[0].length).setValues(rows);
     sheet.getRange(2, 1, rows.length, 1).setNumberFormat('yyyy-mm-dd');
-    sheet.getRange(2, 14, rows.length, 6).setNumberFormat('0');
+    sheet.getRange(2, 18, rows.length, 5).setNumberFormat('0');
+    sheet.getRange(2, 24, rows.length, 6).setNumberFormat('0');
   }
 
   formatSignalSheet_(sheet);
 }
+
+
 
 function writeSignalDetailSheet_(sheet, rows) {
   var header = [[
@@ -203,6 +251,8 @@ function writeSignalDetailSheet_(sheet, rows) {
     'signal_direction',
     'signal_strength',
     'signal_text',
+    'action_hint',
+    'avoid_hint',
     'source_metric',
     'cadence',
     'sort_order'
@@ -216,11 +266,12 @@ function writeSignalDetailSheet_(sheet, rows) {
     sheet.getRange(2, 1, rows.length, rows[0].length).setValues(rows);
     sheet.getRange(2, 1, rows.length, 1).setNumberFormat('yyyy-mm-dd');
     sheet.getRange(2, 7, rows.length, 1).setNumberFormat('0');
-    sheet.getRange(2, 13, rows.length, 1).setNumberFormat('0');
+    sheet.getRange(2, 15, rows.length, 1).setNumberFormat('0');
   }
 
   formatSignalSheet_(sheet);
 }
+
 
 function readMetricsRowsV2_(sheet) {
   var values = sheet.getDataRange().getValues();
@@ -875,7 +926,8 @@ function classifyCommodityBackgroundSignal_(row) {
   return makeSignalResult_('顺周期商品背景：中性', 'neutral', 0, 'neutral', 'low', notes.length ? notes.join('；') : '商品背景处于中间区域');
 }
 
-function classifyHouseholdAllocationSignal_(ratesStrategy, creditStrategy, mortgageBackground, housingBackground, fxBackground, usdAllocationBackground, goldBackground, commodityBackground) {
+
+function classifyHouseholdAllocationSignal_(ratesStrategy, creditStrategy, mortgageBackground, housingBackground, fxBackground, usdAllocationBackground, goldBackground, commodityBackground, householdBuckets) {
   var stableScore = 0;
   var hedgeScore = 0;
   var riskScore = 0;
@@ -893,22 +945,24 @@ function classifyHouseholdAllocationSignal_(ratesStrategy, creditStrategy, mortg
   if (housingBackground && housingBackground.score >= 1) riskScore += 1;
   if (fxBackground && fxBackground.value === 'rmb_stable') riskScore += 0.5;
 
+  var bucketSummary = householdBuckets ? buildHouseholdBucketSummary_(householdBuckets) : '';
+
   if (stableScore >= 2 && hedgeScore >= 2) {
-    return makeSignalResult_('家庭配置：稳健固收为主，保留对冲桶', 'stable_plus_hedge', 1, 'stable_plus_hedge', 'medium', '稳健固收桶可略高于中性，同时保留一定美元/黄金对冲');
+    return makeSignalResult_('家庭配置：稳健固收为主，同时保留对冲', 'stable_plus_hedge', 1, 'stable_plus_hedge', 'medium', bucketSummary || '稳健固收桶可略高于中性，同时保留一定美元/黄金对冲');
   }
   if (stableScore >= 2 && riskScore <= 0.5) {
-    return makeSignalResult_('家庭配置：稳健固收为主', 'stable_income_first', 1, 'stable_income', 'medium', '当前更适合把配置重心放在稳健固收桶');
+    return makeSignalResult_('家庭配置：先把底仓放在稳健固收', 'stable_income_first', 1, 'stable_income', 'medium', bucketSummary || '当前更适合把配置重心放在稳健固收桶');
   }
   if (riskScore >= 2 && hedgeScore <= 1) {
-    return makeSignalResult_('家庭配置：可均衡配置，风险桶中性偏高', 'balanced_with_risk', 1, 'balanced_risk', 'medium', '风险资产桶可中性偏高，但仍应保留基本稳健固收底仓');
+    return makeSignalResult_('家庭配置：可均衡配置，风险桶中性偏高', 'balanced_with_risk', 1, 'balanced_risk', 'medium', bucketSummary || '风险资产桶可中性偏高，但仍应保留基本稳健固收底仓');
   }
   if (hedgeScore >= 2 && stableScore <= 1) {
-    return makeSignalResult_('家庭配置：先稳住活钱与对冲', 'cash_and_hedge', 0, 'cash_hedge', 'medium', '活钱桶与对冲保值桶可略高于中性，先降低组合脆弱性');
+    return makeSignalResult_('家庭配置：先稳住活钱与对冲', 'cash_and_hedge', 0, 'cash_hedge', 'medium', bucketSummary || '活钱桶与对冲保值桶可略高于中性，先降低组合脆弱性');
   }
-  return makeSignalResult_('家庭配置：中性均衡', 'balanced', 0, 'balanced', 'low', '五类资产桶以中性均衡配置为主，根据个人负债与现金流微调');
+  return makeSignalResult_('家庭配置：中性均衡', 'balanced', 0, 'balanced', 'low', bucketSummary || '五类资产桶以中性均衡配置为主，根据个人负债与现金流微调');
 }
 
-function buildHouseholdComment_(liquidity, ratesStrategy, creditStrategy, mortgageBackground, housingBackground, fxBackground, usdAllocationBackground, goldBackground, commodityBackground, alloc, householdAllocation) {
+function buildHouseholdComment_(liquidity, ratesStrategy, creditStrategy, mortgageBackground, housingBackground, fxBackground, usdAllocationBackground, goldBackground, commodityBackground, alloc, householdAllocation, householdBuckets) {
   var parts = [];
   parts.push(householdAllocation.label);
 
@@ -922,9 +976,238 @@ function buildHouseholdComment_(liquidity, ratesStrategy, creditStrategy, mortga
   if (goldBackground) parts.push(goldBackground.label);
   if (commodityBackground) parts.push(commodityBackground.label);
 
-  parts.push('资产桶建议：活钱桶/现金约 ' + alloc.alloc_cash + '%；稳健固收桶约 ' + (alloc.alloc_rates_mid + alloc.alloc_credit_high_grade) + '%；进取固收桶约 ' + (alloc.alloc_rates_long + alloc.alloc_credit_sink) + '%；短久期/类现金票息桶约 ' + alloc.alloc_rates_short + '%；对冲保值桶可根据美元与黄金背景机动配置');
-  parts.push('以上更偏背景判断，仍需结合你的负债、现金流和风险承受力调整');
+  if (householdBuckets) {
+    parts.push(buildHouseholdBucketSummary_(householdBuckets));
+  }
+
+  parts.push(
+    '内部固收引擎参考：长久期利率债 ' + alloc.alloc_rates_long + '%；中久期利率债 ' + alloc.alloc_rates_mid + '%；短久期利率债 ' + alloc.alloc_rates_short + '%；高等级信用债 ' + alloc.alloc_credit_high_grade + '%；票息增强/适度下沉 ' + alloc.alloc_credit_sink + '%；现金/类现金 ' + alloc.alloc_cash + '%'
+  );
+  parts.push('以上更偏背景判断，不是交易指令，仍需结合你的负债、现金流和风险承受力调整');
   return parts.join('；');
+}
+
+function buildHouseholdBuckets_(liquidity, ratesStrategy, creditStrategy, mortgageBackground, housingBackground, fxBackground, usdAllocationBackground, goldBackground, commodityBackground, alloc) {
+  var base = HOUSEHOLD_BUCKET_BASELINE || {
+    cash: 15,
+    stable_fixed_income: 35,
+    active_fixed_income: 20,
+    hedge: 10,
+    risk: 20
+  };
+
+  var plan = {
+    bucket_cash: {
+      title: '活钱桶',
+      base_pct: base.cash,
+      target_pct: base.cash,
+      notes: ['用于应急、短期开销与随时可用资金']
+    },
+    bucket_stable_fixed_income: {
+      title: '稳健固收桶',
+      base_pct: base.stable_fixed_income,
+      target_pct: base.stable_fixed_income,
+      notes: ['承担组合底仓与波动缓冲']
+    },
+    bucket_active_fixed_income: {
+      title: '进取固收桶',
+      base_pct: base.active_fixed_income,
+      target_pct: base.active_fixed_income,
+      notes: ['用于拉久期、信用增强或波段弹性']
+    },
+    bucket_hedge: {
+      title: '对冲保值桶',
+      base_pct: base.hedge,
+      target_pct: base.hedge,
+      notes: ['用于汇率与黄金等防御配置']
+    },
+    bucket_risk: {
+      title: '风险资产桶',
+      base_pct: base.risk,
+      target_pct: base.risk,
+      notes: ['用于权益、商品或更高波动资产']
+    }
+  };
+
+  if (liquidity && liquidity.value === 'tight') {
+    applyBucketAdjust_(plan.bucket_cash, 6, '资金偏紧，活钱要更充足');
+    applyBucketAdjust_(plan.bucket_active_fixed_income, -3, '资金偏紧时不宜把太多仓位放在更依赖负债和波动承受的方向');
+    applyBucketAdjust_(plan.bucket_risk, -3, '资金偏紧时风险桶宜收一点');
+  } else if (liquidity && liquidity.value === 'loose') {
+    applyBucketAdjust_(plan.bucket_cash, -4, '资金偏松时可以少留一点闲置现金');
+    applyBucketAdjust_(plan.bucket_stable_fixed_income, 2, '资金偏松对稳健固收更友好');
+    applyBucketAdjust_(plan.bucket_active_fixed_income, 2, '资金偏松时固收增强策略更容易展开');
+  }
+
+  if (ratesStrategy && ratesStrategy.score >= 1) {
+    applyBucketAdjust_(plan.bucket_stable_fixed_income, 4, '利率债环境偏友好，稳健固收桶可略高于中性');
+    applyBucketAdjust_(plan.bucket_active_fixed_income, 4, '久期环境改善时，进取固收桶也可略增');
+    applyBucketAdjust_(plan.bucket_cash, -3, '固收环境改善时不必留过多空闲现金');
+    applyBucketAdjust_(plan.bucket_risk, -2, '可以把部分风险预算挪回固收');
+  } else if (ratesStrategy && ratesStrategy.value.indexOf('shorter') >= 0) {
+    applyBucketAdjust_(plan.bucket_cash, 3, '久期宜偏短时，活钱和短久期仓位可略高');
+    applyBucketAdjust_(plan.bucket_stable_fixed_income, -1, '久期环境一般时，稳健固收也不必过度拉长');
+    applyBucketAdjust_(plan.bucket_active_fixed_income, -4, '久期不利时，进取固收桶宜收一点');
+    applyBucketAdjust_(plan.bucket_hedge, 1, '部分防御预算可转向对冲桶');
+    applyBucketAdjust_(plan.bucket_risk, 1, '避免把全部调整都压回现金');
+  }
+
+  if (creditStrategy && creditStrategy.value.indexOf('high_grade') >= 0) {
+    applyBucketAdjust_(plan.bucket_stable_fixed_income, 3, '高等级信用更有性价比时，稳健固收桶更适合作为承接');
+    applyBucketAdjust_(plan.bucket_active_fixed_income, -1, '不必为了更高收益明显下沉');
+  }
+  if (creditStrategy && (creditStrategy.value === 'high_grade_small_sink' || creditStrategy.value === 'neutral_small_sink')) {
+    applyBucketAdjust_(plan.bucket_active_fixed_income, 4, '信用环境允许时，进取固收桶可适度增加');
+    applyBucketAdjust_(plan.bucket_cash, -2, '票息增强可替代一部分空置现金');
+    applyBucketAdjust_(plan.bucket_stable_fixed_income, -2, '部分仓位可从稳健固收挪向进取固收');
+  } else if (creditStrategy && creditStrategy.value.indexOf('avoid') >= 0) {
+    applyBucketAdjust_(plan.bucket_stable_fixed_income, 2, '下沉性价比一般时，更适合回到高等级');
+    applyBucketAdjust_(plan.bucket_active_fixed_income, -3, '进取固收桶不宜重配');
+    applyBucketAdjust_(plan.bucket_cash, 1, '腾出的仓位先回到更稳的方向');
+  }
+
+  if (mortgageBackground && mortgageBackground.value === 'funding_tight') {
+    applyBucketAdjust_(plan.bucket_cash, 2, '房贷与负债端偏紧时，家庭现金流缓冲更重要');
+    applyBucketAdjust_(plan.bucket_risk, -2, '先降低高波动暴露');
+  }
+  if (housingBackground && housingBackground.score <= -1) {
+    applyBucketAdjust_(plan.bucket_stable_fixed_income, 2, '住房背景偏冷时，整体配置宜偏稳');
+    applyBucketAdjust_(plan.bucket_risk, -2, '风险桶不必激进');
+  } else if (housingBackground && housingBackground.score >= 1) {
+    applyBucketAdjust_(plan.bucket_risk, 2, '住房与信用背景回暖时，风险偏好可略抬升');
+  }
+
+  if (fxBackground && fxBackground.value === 'rmb_weak') {
+    applyBucketAdjust_(plan.bucket_hedge, 4, '人民币偏弱背景增强时，对冲保值桶可略高于中性');
+    applyBucketAdjust_(plan.bucket_risk, -2, '先降低组合对单一人民币资产的脆弱性');
+  } else if (fxBackground && fxBackground.value === 'rmb_stable') {
+    applyBucketAdjust_(plan.bucket_risk, 1, '汇率压力较轻时，风险桶可更从容');
+  }
+
+  if (usdAllocationBackground && usdAllocationBackground.score >= 1) {
+    applyBucketAdjust_(plan.bucket_hedge, 2, '美元配置背景不差时，可给对冲桶更多空间');
+  } else if (usdAllocationBackground && usdAllocationBackground.score <= -1) {
+    applyBucketAdjust_(plan.bucket_hedge, -1, '美元配置背景一般时，不必把对冲桶推得太高');
+  }
+
+  if (goldBackground && goldBackground.score >= 1) {
+    applyBucketAdjust_(plan.bucket_hedge, 3, '黄金背景偏强时，对冲桶可再加一点');
+    applyBucketAdjust_(plan.bucket_cash, -1, '部分防御预算可从现金转向黄金/外汇对冲');
+  } else if (goldBackground && goldBackground.score <= -1) {
+    applyBucketAdjust_(plan.bucket_hedge, -1, '黄金背景一般时，对冲桶维持基础配置即可');
+  }
+
+  if (commodityBackground && commodityBackground.score >= 1) {
+    applyBucketAdjust_(plan.bucket_risk, 4, '顺周期商品背景偏强时，风险资产桶可中性偏高');
+    applyBucketAdjust_(plan.bucket_cash, -2, '部分活钱可转为风险预算');
+  } else if (commodityBackground && commodityBackground.score <= -1) {
+    applyBucketAdjust_(plan.bucket_risk, -4, '顺周期商品背景偏弱时，风险桶宜收一点');
+    applyBucketAdjust_(plan.bucket_cash, 2, '腾出的仓位先回到活钱或稳健固收');
+    applyBucketAdjust_(plan.bucket_stable_fixed_income, 2, '稳健固收可承接部分预算');
+  }
+
+  if (alloc) {
+    var stableAnchor = toNumberOrNull_(alloc.alloc_rates_mid) + toNumberOrNull_(alloc.alloc_credit_high_grade);
+    var activeAnchor = toNumberOrNull_(alloc.alloc_rates_long) + toNumberOrNull_(alloc.alloc_credit_sink);
+    if (isFiniteNumber_(stableAnchor) && stableAnchor >= 45) {
+      applyBucketAdjust_(plan.bucket_stable_fixed_income, 1, '内部固收引擎也偏向稳健底仓');
+    }
+    if (isFiniteNumber_(activeAnchor) && activeAnchor >= 28) {
+      applyBucketAdjust_(plan.bucket_active_fixed_income, 1, '内部固收引擎给出的进取固收权重不低');
+    }
+    if (isFiniteNumber_(alloc.alloc_cash) && alloc.alloc_cash >= 15) {
+      applyBucketAdjust_(plan.bucket_cash, 1, '内部固收引擎也建议多留一些现金/类现金');
+    }
+  }
+
+  normalizeHouseholdBucketPlan_(plan);
+
+  var keys = [
+    'bucket_cash',
+    'bucket_stable_fixed_income',
+    'bucket_active_fixed_income',
+    'bucket_hedge',
+    'bucket_risk'
+  ];
+
+  for (var i = 0; i < keys.length; i++) {
+    var item = plan[keys[i]];
+    item.signal = makeBucketTiltSignal_(item.title, item.target_pct, item.base_pct, item.notes);
+  }
+
+  return plan;
+}
+
+function applyBucketAdjust_(bucket, delta, note) {
+  bucket.target_pct += delta;
+  if (note) bucket.notes.push(note);
+}
+
+function normalizeHouseholdBucketPlan_(plan) {
+  var keys = [
+    'bucket_cash',
+    'bucket_stable_fixed_income',
+    'bucket_active_fixed_income',
+    'bucket_hedge',
+    'bucket_risk'
+  ];
+  var sum = 0;
+  for (var i = 0; i < keys.length; i++) {
+    if (plan[keys[i]].target_pct < 0) plan[keys[i]].target_pct = 0;
+    sum += plan[keys[i]].target_pct;
+  }
+  if (sum <= 0) return;
+
+  var running = 0;
+  for (var j = 0; j < keys.length; j++) {
+    var item = plan[keys[j]];
+    if (j < keys.length - 1) {
+      item.target_pct = Math.round(item.target_pct * 100 / sum);
+      running += item.target_pct;
+    } else {
+      item.target_pct = 100 - running;
+    }
+  }
+}
+
+function makeBucketTiltSignal_(title, targetPct, basePct, notes) {
+  var delta = targetPct - basePct;
+  var strength = Math.abs(delta) >= 8 ? 'high' : (Math.abs(delta) >= 5 ? 'medium' : 'low');
+  var comment = title + '目标约 ' + targetPct + '%，中性基准约 ' + basePct + '%';
+  if (notes && notes.length) {
+    comment += '；' + dedupeTextParts_(notes).join('；');
+  }
+
+  if (delta >= 5) {
+    return makeSignalResult_(title + '：高于中性', 'increase', 1, 'increase', strength, comment);
+  }
+  if (delta <= -5) {
+    return makeSignalResult_(title + '：低于中性', 'decrease', -1, 'decrease', strength, comment);
+  }
+  return makeSignalResult_(title + '：中性', 'neutral', 0, 'neutral', 'low', comment);
+}
+
+function buildHouseholdBucketSummary_(plan) {
+  if (!plan) return '';
+  return [
+    plan.bucket_cash.signal.label + '（约 ' + plan.bucket_cash.target_pct + '%）',
+    plan.bucket_stable_fixed_income.signal.label + '（约 ' + plan.bucket_stable_fixed_income.target_pct + '%）',
+    plan.bucket_active_fixed_income.signal.label + '（约 ' + plan.bucket_active_fixed_income.target_pct + '%）',
+    plan.bucket_hedge.signal.label + '（约 ' + plan.bucket_hedge.target_pct + '%）',
+    plan.bucket_risk.signal.label + '（约 ' + plan.bucket_risk.target_pct + '%）'
+  ].join('；');
+}
+
+function dedupeTextParts_(parts) {
+  var seen = {};
+  var out = [];
+  for (var i = 0; i < parts.length; i++) {
+    var key = String(parts[i] || '');
+    if (!key || seen[key]) continue;
+    seen[key] = true;
+    out.push(key);
+  }
+  return out;
 }
 
 
@@ -1055,18 +1338,24 @@ function normalizeAllocation_(alloc) {
   }
 }
 
-function makeSignalResult_(label, value, score, direction, strength, comment) {
+
+function makeSignalResult_(label, value, score, direction, strength, comment, actionHint, avoidHint) {
   return {
-    label: label,
+    label: toLifeFriendlyCopy_(label),
     value: value,
     score: score,
     direction: direction,
     strength: strength,
-    comment: comment
+    comment: toLifeFriendlyCopy_(comment || ''),
+    action_hint: actionHint ? toLifeFriendlyCopy_(actionHint) : '',
+    avoid_hint: avoidHint ? toLifeFriendlyCopy_(avoidHint) : ''
   };
 }
 
 function makeSignalDetail_(signal, code, bucket, name, sourceMetric, cadence, sortOrder) {
+  var actionHint = signal.action_hint || inferSignalActionHint_(code, signal);
+  var avoidHint = signal.avoid_hint || inferSignalAvoidHint_(code, signal);
+
   return {
     level1_bucket: bucket,
     signal_code: code,
@@ -1075,11 +1364,20 @@ function makeSignalDetail_(signal, code, bucket, name, sourceMetric, cadence, so
     signal_score: signal.score,
     signal_direction: signal.direction,
     signal_strength: signal.strength,
-    signal_text: signal.label + '；' + signal.comment,
+    signal_text: buildSignalText_(signal),
+    action_hint: actionHint,
+    avoid_hint: avoidHint,
     source_metric: sourceMetric,
     cadence: cadence || 'weekly',
     sort_order: sortOrder
   };
+}
+
+function buildSignalText_(signal) {
+  if (!signal) return '';
+  if (!signal.comment) return signal.label;
+  if (signal.comment === signal.label) return signal.label;
+  return signal.label + '；' + signal.comment;
 }
 
 function pushSignalDetailRows_(rows, dateObj, theme, signalDefs) {
@@ -1096,6 +1394,8 @@ function pushSignalDetailRows_(rows, dateObj, theme, signalDefs) {
       s.signal_direction,
       s.signal_strength,
       s.signal_text,
+      s.action_hint,
+      s.avoid_hint,
       s.source_metric,
       s.cadence,
       s.sort_order
@@ -1108,10 +1408,184 @@ function sortDetailRowsDesc_(rows) {
     var ta = a[0] instanceof Date ? a[0].getTime() : new Date(a[0]).getTime();
     var tb = b[0] instanceof Date ? b[0].getTime() : new Date(b[0]).getTime();
     if (tb !== ta) return tb - ta;
-    return a[12] - b[12];
+    return a[14] - b[14];
   });
   return rows;
 }
+
+function toLifeFriendlyCopy_(text) {
+  if (!text) return '';
+  var out = String(text);
+
+  var exactMap = {
+    '利率债超长端：超配': '利率债超长端：更值得关注',
+    '利率债超长端：低配': '利率债超长端：不宜重配',
+    '利率债策略：拉长久期，超长端可超配': '利率债策略：久期可偏长，超长端更值得关注',
+    '利率债策略：拉长久期，但不做超长端': '利率债策略：久期可偏长，但先不重超长端',
+    '利率债策略：适度拉长，超长端可超配': '利率债策略：久期可略长，超长端更值得关注',
+    '利率债策略：适度拉长，但不做超长端': '利率债策略：久期可略长，但先不重超长端',
+    '利率债策略：缩短久期，超长端低配': '利率债策略：久期宜偏短，超长端不宜重配',
+    '利率债策略：缩短久期': '利率债策略：久期宜偏短',
+    '利率债策略：久期中性，超长端可超配': '利率债策略：久期中性，超长端更值得关注',
+    '利率债策略：久期中性，超长端低配': '利率债策略：久期中性，超长端不宜重配',
+    '信用债策略：中性，可适度下沉': '信用债策略：中性，可少量增加更高票息信用',
+    '信用债策略：高等级占优': '信用债策略：高等级信用更占优',
+    '信用债下沉：不宜下沉': '信用债下沉：不宜为了更高收益明显下沉信用风险'
+  };
+
+  if (exactMap[out]) return exactMap[out];
+
+  out = out
+    .replace(/超配/g, '更值得关注')
+    .replace(/低配/g, '不宜重配')
+    .replace(/拉长久期/g, '久期可偏长')
+    .replace(/缩短久期/g, '久期宜偏短')
+    .replace(/下沉要票息/g, '增加更高票息信用')
+    .replace(/下沉/g, '增加更高票息信用');
+
+  return out;
+}
+
+function inferSignalActionHint_(code, signal) {
+  if (!signal) return '';
+  var value = signal.value || '';
+  var score = toNumberOrNull_(signal.score) || 0;
+
+  if (code === 'liquidity_regime') {
+    if (value === 'tight') return '减少对短期加杠杆、过高久期和负债端脆弱资产的依赖';
+    if (value === 'loose') return '现金用途明确时，可把一部分闲置资金转向稳健固收或票息资产';
+    return '按计划持有即可，等待资金环境更明确';
+  }
+
+  if (code === 'rates_strategy_tilt' || code === 'rates_duration_tilt' || code === 'rates_ultra_long_tilt') {
+    if (value.indexOf('long') >= 0 || score >= 1) return '稳健固收桶和进取固收桶可向中长久期倾斜';
+    if (value.indexOf('short') >= 0 || value.indexOf('underweight') >= 0 || score <= -1) return '久期先收一点，更多放在短久期和活钱桶';
+    return '利率债久期先维持中性';
+  }
+
+  if (code === 'rates_curve_shape') {
+    if (value === 'flat') return '更关注长端和高质量久期资产的配置价值';
+    if (value === 'steep') return '中短端和滚动票息策略可更从容一些';
+    return '曲线形态暂不提供强动作';
+  }
+
+  if (code === 'rates_rv_policy_bank_vs_gov' || code === 'rates_rv_local_gov_vs_gov' || code === 'rates_rv_ranking') {
+    if (score >= 1) return '同类久期里优先看相对更便宜的一侧';
+    if (score <= -1) return '别只因为票息略高就明显加仓';
+    return '相对价值暂按中性处理';
+  }
+
+  if (code === 'credit_strategy_tilt' || code === 'credit_quality_tilt') {
+    if (value.indexOf('high_grade') >= 0 || score >= 1) return '稳健固收桶优先放在高等级信用和高流动性品种';
+    if (score <= -1) return '信用敞口先收一点，回到更透明的资产';
+    return '信用仓位以中性为主';
+  }
+
+  if (code === 'credit_sink_tilt') {
+    if (value === 'can_sink' || score >= 1) return '进取固收桶可少量增加更高票息信用';
+    if (value === 'avoid_sink' || score <= -1) return '先别为了更高收益明显下沉信用风险';
+    return '信用下沉先维持中性';
+  }
+
+  if (code === 'credit_rv_short_end_vs_ncd') {
+    if (value === 'short_credit_over_ncd') return '短端票息资金可优先看高等级短久期信用';
+    if (value === 'funding_watch' || value === 'low_edge') return '短端票息仓位先保守一些，保留更多活钱';
+    return '短端票息方向暂时中性';
+  }
+
+  if (code === 'view_mortgage_background') {
+    if (score >= 1) return '有房贷的可留意重定价、提前还贷和留贷比较';
+    if (score <= -1) return '家庭现金流安排上预留更多缓冲';
+    return '房贷相关决策可先维持原计划';
+  }
+
+  if (code === 'view_housing_background') {
+    if (score >= 1) return '住房相关大额决策可结合现金流再评估，但仍以自住与长期需求为主';
+    if (score <= -1) return '住房相关决策更适合看现金流安全边际，不必急于提高风险暴露';
+    return '住房背景先按中性理解';
+  }
+
+  if (code === 'view_fx_background' || code === 'view_usd_allocation_background') {
+    if (score >= 1 || value === 'rmb_weak') return '对冲保值桶可略高于中性，留意外币资产或美元敞口';
+    if (score <= -1) return '对冲桶维持基础配置即可';
+    return '汇率相关仓位先中性';
+  }
+
+  if (code === 'view_gold_background') {
+    if (score >= 1) return '对冲保值桶可小幅增加黄金相关配置';
+    if (score <= -1) return '黄金更多当作基础对冲，不必追高';
+    return '黄金配置维持基础仓位即可';
+  }
+
+  if (code === 'view_commodity_background') {
+    if (score >= 1) return '风险资产桶可中性偏高，但仍需保留底仓和现金缓冲';
+    if (score <= -1) return '风险桶先收一点，把预算挪回活钱或稳健固收';
+    return '顺周期方向先中性';
+  }
+
+  if (code === 'view_household_allocation') {
+    return '按五类资产桶来理解整体配置，而不是盯着单一品种涨跌';
+  }
+
+  if (code.indexOf('bucket_') === 0) {
+    if (value === 'increase') return '这一桶可以略高于你的中性配置';
+    if (value === 'decrease') return '这一桶先低于中性配置';
+    return '这一桶暂时维持中性';
+  }
+
+  return '';
+}
+
+function inferSignalAvoidHint_(code, signal) {
+  if (!signal) return '';
+  var value = signal.value || '';
+  var score = toNumberOrNull_(signal.score) || 0;
+
+  if (code === 'liquidity_regime') {
+    if (value === 'tight') return '不要在资金偏紧时把组合做得过满';
+    if (value === 'loose') return '资金偏松也不等于任何久期和信用都可以无脑加';
+    return '避免把中性环境误读成趋势确认';
+  }
+
+  if (code === 'rates_strategy_tilt' || code === 'rates_duration_tilt' || code === 'rates_ultra_long_tilt') {
+    if (score >= 1) return '不要把全部久期都压在超长端';
+    if (score <= -1) return '不要因为票息诱惑忽视久期回撤';
+    return '避免频繁来回切换久期';
+  }
+
+  if (code === 'credit_strategy_tilt' || code === 'credit_quality_tilt' || code === 'credit_sink_tilt' || code === 'credit_rv_short_end_vs_ncd') {
+    if (value == 'can_sink' || score >= 1) return '即便环境允许，也别明显越过自己的信用风险边界';
+    if (value === 'avoid_sink' || score <= -1) return '不要为了多一点票息去承担不透明信用风险';
+    return '不要把中性信用环境理解成稳赚机会';
+  }
+
+  if (code === 'view_mortgage_background' || code === 'view_housing_background') {
+    return '这些信号只反映融资与利率背景，不等于房价会立刻上涨或下跌';
+  }
+
+  if (code === 'view_fx_background' || code === 'view_usd_allocation_background') {
+    return '不要情绪化追美元，也不要把汇率信号当成短线交易指令';
+  }
+
+  if (code === 'view_gold_background') {
+    return '不要把黄金当成永远只涨不跌的单向资产';
+  }
+
+  if (code === 'view_commodity_background') {
+    return '不要把商品背景信号直接等同于短期价格必然上涨';
+  }
+
+  if (code === 'view_household_allocation' || code === 'comment_household') {
+    return '最终仍要结合收入稳定性、负债和流动性需求';
+  }
+
+  if (code.indexOf('bucket_') === 0) {
+    return '资产桶倾向是相对中性基准的提醒，不是必须一次到位调仓';
+  }
+
+  return '';
+}
+
 
 function sortAndDedupeByDate_(rows, keyFn) {
   var map = {};
@@ -1122,23 +1596,57 @@ function sortAndDedupeByDate_(rows, keyFn) {
   return deduped;
 }
 
-function getOrCreateSheetByName_(ss, name) {
-  var sh = ss.getSheetByName(name);
-  return sh || ss.insertSheet(name);
+function withSpreadsheetRetry_(fn, label) {
+  var lastErr = null;
+  for (var attempt = 1; attempt <= 4; attempt++) {
+    try {
+      return fn();
+    } catch (err) {
+      lastErr = err;
+      var msg = String(err && err.message || err || '');
+      var retryable = msg.indexOf('Service Spreadsheets timed out') >= 0 ||
+        msg.indexOf('Service invoked too many times') >= 0 ||
+        msg.indexOf('Exceeded maximum execution time') >= 0;
+      if (!retryable || attempt === 4) break;
+      SpreadsheetApp.flush();
+      Utilities.sleep(400 * attempt);
+    }
+  }
+  throw new Error((label || 'Spreadsheet operation') + ' failed: ' + (lastErr && lastErr.message ? lastErr.message : lastErr));
 }
 
-function formatSignalSheet_(sheet) {
-  var lastRow = sheet.getLastRow();
-  var lastCol = sheet.getLastColumn();
+function getOrCreateSheetByName_(ss, name) {
+  return withSpreadsheetRetry_(function() {
+    var sh = ss.getSheetByName(name);
+    return sh || ss.insertSheet(name);
+  }, 'getOrCreateSheetByName_(' + name + ')');
+}
+
+function formatSignalSheet_(sheet, options) {
+  options = options || {};
+  var lastRow = withSpreadsheetRetry_(function() { return sheet.getLastRow(); }, 'sheet.getLastRow');
+  var lastCol = withSpreadsheetRetry_(function() { return sheet.getLastColumn(); }, 'sheet.getLastColumn');
   if (lastRow < 1 || lastCol < 1) return;
 
-  sheet.setFrozenRows(1);
-  sheet.getRange(1, 1, 1, lastCol)
-    .setFontWeight('bold')
-    .setBackground('#f3f6d8');
+  withSpreadsheetRetry_(function() {
+    sheet.setFrozenRows(1);
+    sheet.getRange(1, 1, 1, lastCol)
+      .setFontWeight('bold')
+      .setBackground('#f3f6d8');
+    return true;
+  }, 'formatSignalSheet_ header');
 
   if (lastRow >= 2) {
-    sheet.getRange(2, 1, lastRow - 1, lastCol).setFontSize(10);
+    withSpreadsheetRetry_(function() {
+      sheet.getRange(2, 1, lastRow - 1, lastCol).setFontSize(10);
+      return true;
+    }, 'formatSignalSheet_ body');
   }
-  sheet.autoResizeColumns(1, lastCol);
+
+  if (!options.skipAutoResize && lastRow <= 2000) {
+    withSpreadsheetRetry_(function() {
+      sheet.autoResizeColumns(1, lastCol);
+      return true;
+    }, 'formatSignalSheet_ resize');
+  }
 }
