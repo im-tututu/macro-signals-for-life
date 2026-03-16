@@ -7,7 +7,8 @@
  * 手工测试入口：执行完整日更流程。
  */
 function test() {
-  rebuildSignalAndReview_();
+  testLifeAsset();
+  //rebuildSignalAndReview_();
   //runEnhancedSystem();
   
   // buildMetrics_();
@@ -33,6 +34,7 @@ function runEnhancedSystem() {
    * - 未配置时仅打印提示并跳过，不阻塞现有国内数据流程
    */
   fetchOverseasMacro_();
+  fetchLifeAsset_();
 
   rebuildAll_();
 }
@@ -90,4 +92,9 @@ function showBackfillCursor() {
 function resetBackfillCursor() {
   clearBackfillCursor_();
   Logger.log('BACKFILL_CURSOR cleared');
+}
+
+
+function testLifeAssetEntry() {
+  return forceFetchLifeAsset_();
 }
