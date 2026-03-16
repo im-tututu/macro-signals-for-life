@@ -44,7 +44,7 @@ jobs:
           EOF
 
       - name: Push to Apps Script
-        run: npx clasp push -f
+        run: npx -y @google/clasp push -f
 
       - name: Sync external API keys to Script Properties
         env:
