@@ -5,7 +5,7 @@
 
 /** 原始数据表 */
 var SHEET_CURVE_RAW = '原始_收益率曲线';
-var SHEET_MONEY_MARKET_RAW = '原始_货币';
+var SHEET_MONEY_MARKET_RAW = '原始_资金面';
 var SHEET_FUTURES_RAW = '原始_国债期货';
 
 var SHEET_POLICY_RATE_RAW = "原始_政策利率";
@@ -91,8 +91,11 @@ var SIGNAL_THRESHOLDS = {
 };
 
 
-/** 海外宏观原始表 */
-var SHEET_OVERSEAS_MACRO_RAW = '原始_海外宏观';
+/** 宏观补充原始表。
+ * 现阶段仍沿用旧表名“原始_海外宏观”，避免破坏已有表链接。
+ */
+var SHEET_MACRO_RAW = '原始_海外宏观';
+var SHEET_OVERSEAS_MACRO_RAW = SHEET_MACRO_RAW;
 
 /**
  * 海外宏观原始表表头。
@@ -153,7 +156,7 @@ var OVERSEAS_MACRO_COL = {
  *
  * 说明：
  * - 这里只保存“字段 -> FRED series_id”的映射
- * - 真正抓取逻辑统一放在 15_raw_overseas_macro.js 中
+ * - 真正抓取逻辑统一放在 13_source_fred.js / 15_source_external_misc.js 中
  * - usd_broad 使用更稳定的 broad dollar index 口径，而不是 ICE DXY
  * - usd_cny 使用 FRED 现成序列口径，便于保持来源收敛
  */
@@ -177,7 +180,7 @@ var OVERSEAS_MACRO_FRED_SERIES = {
  * 说明：
  * - gold / wti / brent 使用日频
  * - copper 官方只提供 monthly / quarterly / annual，这里固定 monthly
- * - 若后续更换商品源，只需改这里与对应抓取函数即可
+ * - 若后续更换商品源，只需改这里与 15_source_external_misc.js 中对应抓取函数即可
  */
 var OVERSEAS_MACRO_ALPHA_SERIES = {
   gold: {

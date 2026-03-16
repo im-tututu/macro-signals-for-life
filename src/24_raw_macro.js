@@ -1,4 +1,16 @@
 /********************
+ * 24_raw_macro.js
+ * 宏观补充原始表。
+ *
+ * 当前主表仍沿用旧表名“原始_海外宏观”，避免打断既有公式与指标链路。
+ *
+ * 当前接入：
+ * - FRED（独立来源文件）
+ * - Alpha Vantage（放在 external misc 中）
+ * - 国家统计局 / SGE / BOC / 余额宝（先预留来源接口与民生资产表抓取入口）
+ ********************/
+
+/********************
  * 15_raw_overseas_macro.js
  *
  * 原始_海外宏观
@@ -26,6 +38,8 @@
 /**
  * 手工测试入口：默认遵循“今天已抓过则跳过”。
  */
+
+
 function testOverseasMacro() {
   return forceFetchOverseasMacro_();
 }
@@ -37,6 +51,8 @@ function testOverseasMacro() {
  * - 你刚改了字段或 source 说明，想重新覆盖同一个 date 的行
  * - 你怀疑上一次抓取结果有空值，想立即重抓
  */
+
+
 function forceFetchOverseasMacro_() {
   return fetchOverseasMacro_(false);
 }
@@ -51,6 +67,8 @@ function forceFetchOverseasMacro_() {
  * @return {Object}
  *   统一返回状态对象，便于在日志或未来 CI 中定位结果。
  */
+
+
 function fetchOverseasMacro_(forceRefresh) {
   var force = forceRefresh === true;
   var sheet = getOrCreateOverseasMacroSheet_();
@@ -183,6 +201,8 @@ function fetchOverseasMacro_(forceRefresh) {
  * - 这里只写入，不在日志中回显真实 key
  * - 写入的是 Script Properties，因此对整个脚本可见
  */
+
+
 function setApiKeysFromParams(fredApiKey, alphaVantageApiKey) {
   if (!fredApiKey) {
     throw new Error('缺少 fredApiKey');
@@ -210,6 +230,8 @@ function setApiKeysFromParams(fredApiKey, alphaVantageApiKey) {
  * - 只返回布尔状态
  * - 不返回真实值，避免在日志或 API 返回中泄露密钥
  */
+
+
 function getApiKeyStatus_() {
   var props = PropertiesService.getScriptProperties();
   return {
@@ -227,6 +249,8 @@ function getApiKeyStatus_() {
  *
  * 这样你不管是手工在 GAS 中配置，还是走 GitHub Actions 自动写入，都能直接照着做。
  */
+
+
 function logOverseasMacroSecretsHint_(status) {
   var missing = [];
   if (!status.fred) missing.push('FRED_API_KEY');
@@ -244,6 +268,8 @@ function logOverseasMacroSecretsHint_(status) {
 /**
  * 统一读取必须存在的 Script Property。
  */
+
+
 function getRequiredSecret_(key) {
   var value = PropertiesService.getScriptProperties().getProperty(key);
   if (!value) {
@@ -265,288 +291,8 @@ function getRequiredSecret_(key) {
  *   ...
  * }
  */
-function fetchOverseasMacroFromFred_() {
-  var apiKey = getRequiredSecret_('FRED_API_KEY');
-  var out = {};
-
-  Object.keys(OVERSEAS_MACRO_FRED_SERIES).forEach(function (field) {
-    out[field] = fetchFredLatestObservation_(
-      OVERSEAS_MACRO_FRED_SERIES[field],
-      apiKey
-    );
-  });
-
-  return out;
-}
-
-/**
- * 获取单个 FRED 序列最近可用的 observation。
- *
- * 关键处理：
- * - FRED 对部分序列会返回 '.' 作为空值
- * - 因此这里不是直接取第一条，而是向下寻找最近的有效数字
- */
-function fetchFredLatestObservation_(seriesId, apiKey) {
-  var url =
-    'https://api.stlouisfed.org/fred/series/observations'
-    + '?series_id=' + encodeURIComponent(seriesId)
-    + '&api_key=' + encodeURIComponent(apiKey)
-    + '&file_type=json'
-    + '&sort_order=desc'
-    + '&limit=10';
-
-  var res = fetchOverseasMacroUrl_(url, {
-    method: 'get',
-    muteHttpExceptions: true
-  });
-
-  if (res.getResponseCode() !== 200) {
-    throw new Error(
-      'FRED HTTP=' + res.getResponseCode()
-      + ' | seriesId=' + seriesId
-      + ' | body=' + safeSliceOverseas_(res.getContentText(), 300)
-    );
-  }
-
-  var json = JSON.parse(res.getContentText());
-  var observations = json && json.observations ? json.observations : [];
-
-  if (!observations.length) {
-    throw new Error('FRED observations empty: ' + seriesId);
-  }
-
-  for (var i = 0; i < observations.length; i++) {
-    var obs = observations[i];
-    if (!obs || !obs.date) continue;
-    if (obs.value === '.' || obs.value === '' || obs.value === null || obs.value === undefined) continue;
-
-    var value = toNumberOrNull_(obs.value);
-    if (!isFiniteNumber_(value)) continue;
-
-    return {
-      date: normYMD_(obs.date),
-      value: value,
-      source: 'FRED:' + seriesId
-    };
-  }
-
-  throw new Error('FRED no valid observation: ' + seriesId);
-}
-
-/* =========================
- * Source 2: Alpha Vantage
- * ========================= */
-
-/**
- * 从 Alpha Vantage 批量抓取商品字段。
- *
- * 说明：
- * - gold / wti / brent 为日频
- * - copper 当前固定 monthly
- * - 返回结构与 FRED 保持一致，便于后续统一拼表
- */
-/**
- * 从 Alpha Vantage 批量抓取商品相关字段。
- *
- * 重要：
- * - Alpha Vantage 免费层有较严格的短时请求频率限制
- * - 因此这里不要连续无间隔请求
- * - 每次请求之间主动 sleep，避免触发 "1 request per second" 限制
- */
-function fetchOverseasMacroFromAlphaVantage_() {
-  var apiKey = getRequiredSecret_('ALPHA_VANTAGE_API_KEY');
-  var out = {};
-  var fields = Object.keys(OVERSEAS_MACRO_ALPHA_SERIES);
-
-  for (var i = 0; i < fields.length; i++) {
-    var field = fields[i];
-    var spec = OVERSEAS_MACRO_ALPHA_SERIES[field];
-
-    try {
-      out[field] = fetchAlphaVantageLatestObservation_(spec, apiKey);
-    } catch (e) {
-      Logger.log(
-        'alpha field failed'
-        + ' | field=' + field
-        + ' | fn=' + spec.fn
-        + ' | error=' + e.message
-      );
-      out[field] = null;
-    }
-
-    /**
-     * 免费层限频保护：
-     * - 官方返回已明确提示 1 request per second
-     * - 这里留 1.2 秒缓冲，尽量避免边界抖动
-     */
-    if (i < fields.length - 1) {
-      Utilities.sleep(1200);
-    }
-  }
-
-  return out;
-}
-
-/**
- * 获取单个 Alpha Vantage 商品序列最近 observation。
- *
- * 重要：
- * - Alpha Vantage 免费层超限时，常常不是 HTTP 4xx，而是在 JSON 里返回 Note / Information
- * - 所以这里必须同时检查 HTTP 状态码和 JSON 错误字段
- */
-
-/**
- * 获取单个 Alpha Vantage 商品序列最近 observation。
- *
- * 重要说明：
- * - Alpha Vantage 的商品接口虽然都放在 Commodities 分类下，
- *   但不同 function 的返回结构不一定完全一致。
- * - 例如：
- *   - WTI / BRENT / COPPER 常见是 data[i].value
- *   - GOLD_SILVER_HISTORY 可能不是 value，而是 price / close 等其他字段
- *
- * 因此这里不能只写死 obs.value，而要做兼容提取。
- */
-function fetchAlphaVantageLatestObservation_(spec, apiKey) {
-  var url = buildAlphaVantageUrl_(spec, apiKey);
-
-  var res = fetchOverseasMacroUrl_(url, {
-    method: 'get',
-    muteHttpExceptions: true
-  });
-
-  if (res.getResponseCode() !== 200) {
-    throw new Error(
-      'Alpha Vantage HTTP=' + res.getResponseCode()
-      + ' | fn=' + spec.fn
-      + ' | body=' + safeSliceOverseas_(res.getContentText(), 300)
-    );
-  }
-
-  var body = res.getContentText();
-  var json = JSON.parse(body);
-
-  if (!json) {
-    throw new Error('Alpha Vantage empty JSON: ' + spec.fn);
-  }
-  if (json['Error Message']) {
-    throw new Error('Alpha Vantage error: ' + spec.fn + ' | ' + json['Error Message']);
-  }
-  if (json['Information']) {
-    throw new Error('Alpha Vantage information: ' + spec.fn + ' | ' + json['Information']);
-  }
-  if (json['Note']) {
-    throw new Error('Alpha Vantage note: ' + spec.fn + ' | ' + json['Note']);
-  }
-
-  var data = json.data || [];
-  if (!data.length) {
-    throw new Error(
-      'Alpha Vantage data empty: ' + spec.fn
-      + ' | body=' + safeSliceOverseas_(body, 500)
-    );
-  }
-
-  for (var i = 0; i < data.length; i++) {
-    var obs = data[i];
-    if (!obs || !obs.date) continue;
-
-    var value = extractAlphaVantageNumericValue_(obs);
-    if (!isFiniteNumber_(value)) continue;
-
-    return {
-      date: normYMD_(obs.date),
-      value: value,
-      source: 'ALPHA_VANTAGE:' + spec.fn + ':' + spec.interval
-    };
-  }
-
-  /**
-   * 如果走到这里，说明 data 有内容，但没有找到可识别的数值字段。
-   * 把首条记录的 key 打出来，方便快速修正解析逻辑。
-   */
-  var sample = data[0] || {};
-  var sampleKeys = Object.keys(sample).join(',');
-
-  throw new Error(
-    'Alpha Vantage no valid observation: ' + spec.fn
-    + ' | sample_keys=' + sampleKeys
-    + ' | sample=' + safeSliceOverseas_(JSON.stringify(sample), 500)
-  );
-}
 
 
-
-
-
-/**
- * 从 Alpha Vantage 单条 observation 中提取数值。
- *
- * 为什么要单独封装：
- * - 不同商品 function 的 JSON 字段名不完全一致
- * - 不能把所有接口都假定成 data[i].value
- *
- * 当前兼容顺序：
- * 1) value   - WTI / BRENT / COPPER 常见
- * 2) price   - GOLD / SILVER 类接口常见候选
- * 3) close   - 兜底兼容
- * 4) 其他常见命名再向后补
- */
-function extractAlphaVantageNumericValue_(obs) {
-  if (!obs) return null;
-
-  var candidates = [
-    obs.value,
-    obs.price,
-    obs.close,
-    obs.gold,
-    obs.silver
-  ];
-
-  for (var i = 0; i < candidates.length; i++) {
-    var n = toNumberOrNull_(candidates[i]);
-    if (isFiniteNumber_(n)) {
-      return n;
-    }
-  }
-
-  return null;
-}
-
-
-
-
-/**
- * 构造 Alpha Vantage 商品 URL。
- *
- * 目前支持：
- * - GOLD_SILVER_HISTORY
- * - WTI
- * - BRENT
- * - COPPER
- */
-function buildAlphaVantageUrl_(spec, apiKey) {
-  var url =
-    'https://www.alphavantage.co/query'
-    + '?function=' + encodeURIComponent(spec.fn)
-    + '&apikey=' + encodeURIComponent(apiKey);
-
-  if (spec.symbol) {
-    url += '&symbol=' + encodeURIComponent(spec.symbol);
-  }
-  if (spec.interval) {
-    url += '&interval=' + encodeURIComponent(spec.interval);
-  }
-  return url;
-}
-
-/* =========================
- * Sheet helpers
- * ========================= */
-
-/**
- * 获取或创建 原始_海外宏观 工作表，并校验表头。
- */
 function getOrCreateOverseasMacroSheet_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sh = ss.getSheetByName(SHEET_OVERSEAS_MACRO_RAW);
@@ -580,6 +326,8 @@ function getOrCreateOverseasMacroSheet_() {
  * - 读取 fetched_at 列
  * - 只要存在某一行的 fetched_at 日期 == 今天，就视为“今天已经抓过”
  */
+
+
 function hasFetchedOverseasMacroToday_(sheet) {
   var lastRow = sheet.getLastRow();
   if (lastRow < 2) return false;
@@ -601,6 +349,8 @@ function hasFetchedOverseasMacroToday_(sheet) {
 /**
  * 按 date 进行 upsert。
  */
+
+
 function upsertOverseasMacroRowByDate_(sheet, dateStr, row) {
   if (!dateStr) {
     throw new Error('upsertOverseasMacroRowByDate_ missing dateStr');
@@ -635,31 +385,8 @@ function upsertOverseasMacroRowByDate_(sheet, dateStr, row) {
  *
  * 这样能最大程度兼容你当前仓库已有的网络请求封装。
  */
-function fetchOverseasMacroUrl_(url, options) {
-  if (typeof fetchWithFallback_ === 'function') {
-    return fetchWithFallback_(url, options);
-  }
-  if (typeof safeFetch_ === 'function') {
-    return safeFetch_(url, options);
-  }
-  return UrlFetchApp.fetch(url, options || {});
-}
 
 
-/**
- * 日志安全截断。
- *
- * 这里单独保留一份，不依赖其他 raw 文件中的同名 helper，
- * 避免未来拆分文件时出现隐式依赖。
- */
-function safeSliceOverseas_(s, len) {
-  s = s == null ? '' : String(s);
-  return s.length <= len ? s : s.slice(0, len);
-}
-
-/**
- * 统一格式化 yyyy-MM-dd HH:mm:ss。
- */
 function formatDateTimeOverseas_(d) {
   if (!(d instanceof Date)) d = new Date(d);
   return Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
@@ -668,6 +395,8 @@ function formatDateTimeOverseas_(d) {
 /**
  * 从 observation 对象中安全取 value。
  */
+
+
 function pickObsValue_(obj) {
   return obj && obj.value != null ? obj.value : '';
 }
@@ -675,6 +404,8 @@ function pickObsValue_(obj) {
 /**
  * 从 observation 对象中安全取 date。
  */
+
+
 function pickObsDate_(obj) {
   return obj && obj.date ? obj.date : '';
 }
@@ -686,6 +417,8 @@ function pickObsDate_(obj) {
  * - 给 fetched_at 判重
  * - 支持 Date / 字符串两种输入
  */
+
+
 function extractDatePart_(v) {
   return normYMD_(v);
 }
@@ -697,6 +430,8 @@ function extractDatePart_(v) {
  * - 当你发现某个字段明显滞后时，需要知道它自己的 observation date
  * - 尤其 copper 是低频序列，如果不把 observation date 一起记下来，后续容易误判
  */
+
+
 function buildOverseasMacroSourceNote_(fredData, alphaData) {
   return [
     'FRED',
@@ -708,4 +443,70 @@ function buildOverseasMacroSourceNote_(fredData, alphaData) {
     'brent_obs_date=' + pickObsDate_(alphaData.brent),
     'copper_obs_date=' + pickObsDate_(alphaData.copper)
   ].join(' | ');
+}
+
+
+/* =========================
+ * 民生 / 资产价格表（P3 预留）
+ * ========================= */
+
+/**
+ * 当前仓库已在 config 中保留 LIFE_ASSET_* 常量，但原始实现尚未提交。
+ * 为了让主流程稳定，这里先提供“可安全跳过”的最小实现：
+ * - 会初始化表头
+ * - 不会因未实现具体抓取而中断主流程
+ * - 后续若补齐国家统计局 / SGE / BOC / 余额宝抓取，可直接在此扩展
+ */
+function fetchLifeAsset_() {
+  var sheet = getOrCreateLifeAssetSheet_();
+  if (hasFetchedLifeAssetToday_(sheet)) {
+    Logger.log('life_asset skip | reason=already_fetched_today');
+    return { skipped: true, reason: 'already_fetched_today' };
+  }
+
+  var today = formatDate_(new Date());
+  var row = [
+    today, '', '', '', '', '', '', '',
+    'placeholder: stats_gov|sge|boc|money_fund',
+    formatDateTime_(new Date())
+  ];
+
+  upsertRowByDate_(sheet, today, row);
+  Logger.log('life_asset placeholder row upserted | date=' + today);
+  return { skipped: false, date: today, placeholder: true };
+}
+
+function forceFetchLifeAsset_() {
+  var sheet = getOrCreateLifeAssetSheet_();
+  var today = formatDate_(new Date());
+  var row = [
+    today, '', '', '', '', '', '', '',
+    'placeholder: stats_gov|sge|boc|money_fund',
+    formatDateTime_(new Date())
+  ];
+  upsertRowByDate_(sheet, today, row);
+  return { skipped: false, date: today, placeholder: true };
+}
+
+function testLifeAsset() {
+  return fetchLifeAsset_();
+}
+
+function getOrCreateLifeAssetSheet_() {
+  var sheet = ensureSheet_(SHEET_LIFE_ASSET_RAW);
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow(LIFE_ASSET_HEADERS);
+  }
+  return sheet;
+}
+
+function hasFetchedLifeAssetToday_(sheet) {
+  var lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return false;
+  var values = sheet.getRange(2, LIFE_ASSET_COL.fetched_at + 1, lastRow - 1, 1).getDisplayValues();
+  var today = formatDate_(new Date());
+  for (var i = values.length - 1; i >= 0; i--) {
+    if (extractDatePart_(values[i][0]) === today) return true;
+  }
+  return false;
 }

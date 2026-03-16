@@ -1,5 +1,5 @@
 /********************
- * 21_signal.js
+ * 31_signal.js
  * 基于“指标”生成两个信号表：
  * 1) 信号-主要：一天一行，聚合主要信号与配置建议
  * 2) 信号-明细：一天多行，一个信号一行，便于后续扩展
@@ -1614,14 +1614,6 @@ function withSpreadsheetRetry_(fn, label) {
   }
   throw new Error((label || 'Spreadsheet operation') + ' failed: ' + (lastErr && lastErr.message ? lastErr.message : lastErr));
 }
-
-function getOrCreateSheetByName_(ss, name) {
-  return withSpreadsheetRetry_(function() {
-    var sh = ss.getSheetByName(name);
-    return sh || ss.insertSheet(name);
-  }, 'getOrCreateSheetByName_(' + name + ')');
-}
-
 function formatSignalSheet_(sheet, options) {
   options = options || {};
   var lastRow = withSpreadsheetRetry_(function() { return sheet.getLastRow(); }, 'sheet.getLastRow');

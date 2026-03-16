@@ -1,5 +1,5 @@
 /********************
- * 11_raw_money_market.js
+ * 22_raw_money_market.js
  *
  * 银行间质押式回购利率：
  * - 当天：prr-md.json（实时更新）
@@ -81,23 +81,9 @@ var MM_COL = {
 function fetchPledgedRepoRates_() {
   var sheet = getOrCreateMoneyMarketSheet_();
 
-  var url =
-    "https://www.chinamoney.com.cn/r/cms/www/chinamoney/data/currency/prr-md.json?t=" +
-    Date.now();
-
-  var res = fetchWithFallback_(url, {
-    method: "get",
-    muteHttpExceptions: true
-  });
-
-  var code = res.getResponseCode();
-  if (code !== 200) {
-    throw new Error(
-      "prr-md.json HTTP=" + code + " body=" + safeSlice_(res.getContentText(), 300)
-    );
-  }
-
-  var json = JSON.parse(res.getContentText());
+  var snapshot = fetchChinaMoneyRepoSnapshot_();
+  var url = snapshot.url;
+  var json = snapshot.json;
   var data = json.data || {};
   var records = json.records || [];
 
@@ -680,158 +666,6 @@ function debugMoneyMarketDuplicateShowDateCN() {
  * 这样可避免周末/节假日运行时，
  * 把“上一交易日数据”写成“今天日期”
  */
-function deriveMoneyMarketBizDate_(data) {
-  data = data || {};
 
-  var candidates = [
-    data.showDateCN,
-    data.date,
-    data.showDate,
-    data.tradeDate
-  ];
 
-  for (var i = 0; i < candidates.length; i++) {
-    var ds = extractDateFromAnyText_(candidates[i]);
-    if (ds) return ds;
-  }
 
-  return formatDate_(new Date());
-}
-
-/**
- * 从任意文本中提取日期，返回 yyyy-MM-dd
- *
- * 支持：
- * - 2026-03-06
- * - 2026/03/06
- * - 2026.03.06
- * - 2026年3月6日
- * - 含时间文本，如 2026-03-06 14:30
- */
-function extractDateFromAnyText_(v) {
-  if (v === null || v === undefined || v === "") return "";
-
-  if (v instanceof Date && !isNaN(v.getTime())) {
-    return formatDate_(v);
-  }
-
-  var s = String(v).trim();
-  if (!s) return "";
-
-  var m;
-
-  m = s.match(/(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/);
-  if (m) {
-    return (
-      m[1] +
-      "-" +
-      ("0" + m[2]).slice(-2) +
-      "-" +
-      ("0" + m[3]).slice(-2)
-    );
-  }
-
-  m = s.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/);
-  if (m) {
-    return (
-      m[1] +
-      "-" +
-      ("0" + m[2]).slice(-2) +
-      "-" +
-      ("0" + m[3]).slice(-2)
-    );
-  }
-
-  return "";
-}
-
-/**
- * 统一日期字符串
- *
- * 支持：
- * - Date
- * - yyyy-M-d / yyyy/M/d / yyyy.M.d
- * - yy-M-d / yy/M/d / yy.M.d
- */
-function normalizeDateKey_(v) {
-  if (v === null || v === undefined || v === "") return "";
-
-  if (v instanceof Date && !isNaN(v.getTime())) {
-    return formatDate_(v);
-  }
-
-  var s = String(v).trim();
-  if (!s) return "";
-
-  var m4 = s.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})$/);
-  if (m4) {
-    return (
-      m4[1] +
-      "-" +
-      ("0" + m4[2]).slice(-2) +
-      "-" +
-      ("0" + m4[3]).slice(-2)
-    );
-  }
-
-  var m2 = s.match(/^(\d{2})[-\/.](\d{1,2})[-\/.](\d{1,2})$/);
-  if (m2) {
-    return (
-      "20" +
-      m2[1] +
-      "-" +
-      ("0" + m2[2]).slice(-2) +
-      "-" +
-      ("0" + m2[3]).slice(-2)
-    );
-  }
-
-  return s;
-}
-
-/**
- * 安全转数字
- *
- * - 空 => ""
- * - 可转数字 => number
- * - 不能转 => ""
- */
-function toNum_(v) {
-  if (v === null || v === undefined || v === "") return "";
-  var n = Number(v);
-  return isFinite(n) ? n : "";
-}
-
-/**
- * 安全转字符串
- */
-function toStr_(v) {
-  return v === null || v === undefined ? "" : String(v).trim();
-}
-
-/**
- * 判空
- */
-function isBlank_(v) {
-  return v === "" || v === null || v === undefined;
-}
-
-/**
- * 日志安全截断
- */
-function safeSlice_(s, len) {
-  s = s == null ? "" : String(s);
-  return s.length <= len ? s : s.slice(0, len);
-}
-
-/**
- * 请求兼容层：
- * - 有 safeFetch_ 就优先用
- * - 没有则回退 UrlFetchApp.fetch
- */
-function fetchWithFallback_(url, options) {
-  if (typeof safeFetch_ === "function") {
-    return safeFetch_(url, options);
-  }
-  return UrlFetchApp.fetch(url, options || {});
-}

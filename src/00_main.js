@@ -1,38 +1,35 @@
 /********************
  * 00_main.js
- * 项目入口与任务编排。
+ * 主入口与人工测试入口。
+ *
+ * 说明：
+ * - 真正的定时触发入口统一放在 50_jobs.js
+ * - 这里保留 runEnhancedSystem / backfill 等高频手工入口
  ********************/
 
 /**
- * 手工测试入口：执行完整日更流程。
+ * 手工测试入口。
  */
 function test() {
-  testLifeAsset();
-  //rebuildSignalAndReview_();
-  //runEnhancedSystem();
-  
-  // buildMetrics_();
-  // buildSignal_();
-  // buildSignalReview_();
-  //buildSignalRecent_(7);
+  runEnhancedSystem();
 }
 
 /**
- * 主入口：抓取当日原始数据，并重建统一指标表与统一信号表。
+ * 一次性执行完整日更流程：
+ * 1) 中债曲线
+ * 2) 资金面
+ * 3) 国债期货
+ * 4) 政策利率
+ * 5) 海外宏观 / 民生资产
+ * 6) 指标、信号、复盘重建
  */
 function runEnhancedSystem() {
-  //var today = formatDate_("2026-03-09");
   var today = formatDate_(new Date());
 
   runDailyWide_(today);
   fetchPledgedRepoRates_();
   fetchBondFutures_();
-
-  /**
-   * 海外宏观原始表：
-   * - 已配置 FRED / ALPHA_VANTAGE secrets 时自动抓取
-   * - 未配置时仅打印提示并跳过，不阻塞现有国内数据流程
-   */
+  syncRawPolicyRateLatest();
   fetchOverseasMacro_();
   fetchLifeAsset_();
 
@@ -40,29 +37,7 @@ function runEnhancedSystem() {
 }
 
 /**
- * 从最近 30 天起点重新安全回补，每次最多处理 8 个非周末日期。
- */
-function testBackfillSafe() {
-  var end = new Date();
-  var start = new Date(end);
-  start.setDate(end.getDate() - 30);
-
-  backfillBatch_(formatDate_(start), formatDate_(end), 8, true);
-}
-
-/**
- * 从回补游标继续补最近 120 天数据，每次最多处理 8 个非周末日期。
- */
-function resumeBackfillSafe() {
-  var end = new Date();
-  var start = new Date(end);
-  start.setDate(end.getDate() - 120);
-
-  backfillBatch_(formatDate_(start), formatDate_(end), 8, false);
-}
-
-/**
- * 重建所有中间指标与信号表。
+ * 仅重建派生层，不抓取原始数据。
  */
 function rebuildAll_() {
   buildMetrics_();
@@ -80,20 +55,33 @@ function rebuildSignalAndReview_() {
 }
 
 /**
- * 输出当前回补游标。
+ * 从最近 30 天起点重新安全回补，每次最多处理 8 个非周末日期。
  */
+function testBackfillSafe() {
+  var end = new Date();
+  var start = new Date(end);
+  start.setDate(end.getDate() - 30);
+  backfillBatch_(formatDate_(start), formatDate_(end), 8, true);
+}
+
+/**
+ * 从回补游标继续补最近 120 天数据，每次最多处理 8 个非周末日期。
+ */
+function resumeBackfillSafe() {
+  var end = new Date();
+  var start = new Date(end);
+  start.setDate(end.getDate() - 120);
+  backfillBatch_(formatDate_(start), formatDate_(end), 8, false);
+}
+
 function showBackfillCursor() {
   Logger.log('BACKFILL_CURSOR=' + getBackfillCursor_());
 }
 
-/**
- * 清空当前回补游标。
- */
 function resetBackfillCursor() {
   clearBackfillCursor_();
   Logger.log('BACKFILL_CURSOR cleared');
 }
-
 
 function testLifeAssetEntry() {
   return forceFetchLifeAsset_();

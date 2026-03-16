@@ -241,3 +241,147 @@ function normalizeLooseDate_(v) {
 function formatDateKey_(dateObj) {
   return Utilities.formatDate(dateObj, Session.getScriptTimeZone(), 'yyyy-MM-dd');
 }
+
+
+/**
+ * 统一获取或创建工作表。
+ * 兼容旧项目里散落的 getOrCreateSheetByName_ 调用。
+ */
+function ensureSheet_(spreadsheetOrName, maybeName) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var name = spreadsheetOrName;
+
+  if (typeof spreadsheetOrName !== 'string') {
+    ss = spreadsheetOrName || ss;
+    name = maybeName;
+  }
+
+  var sh = ss.getSheetByName(name);
+  if (!sh) {
+    sh = ss.insertSheet(name);
+  }
+  return sh;
+}
+
+function getOrCreateSheetByName_(spreadsheetOrName, maybeName) {
+  return ensureSheet_(spreadsheetOrName, maybeName);
+}
+
+/**
+ * 统一生成较短的缓存 key，避免 CacheService key 过长。
+ */
+function buildShortCacheKey_(prefix, parts) {
+  parts = parts || [];
+  var raw = prefix + '|' + parts.join('|');
+  var digest = Utilities.computeDigest(
+    Utilities.DigestAlgorithm.MD5,
+    raw,
+    Utilities.Charset.UTF_8
+  );
+  var hex = digest.map(function(b) {
+    var v = (b < 0 ? b + 256 : b).toString(16);
+    return v.length === 1 ? '0' + v : v;
+  }).join('');
+  return prefix + '_' + hex;
+}
+
+/**
+ * 统一文本请求，返回字符串。
+ */
+function safeFetchText_(url, options, retryTimes) {
+  return safeFetch_(url, options, retryTimes).getContentText('UTF-8');
+}
+
+/**
+ * 统一 JSON 请求，返回已解析对象。
+ */
+function safeFetchJson_(url, options, retryTimes) {
+  var text = safeFetchText_(url, options, retryTimes);
+  return JSON.parse(text);
+}
+
+/**
+ * HTML entity 解码。与 stripTags_ 搭配使用。
+ */
+function decodeHtmlText_(s) {
+  if (s == null || s === '') return '';
+  return String(s)
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&#10;/gi, '\n')
+    .replace(/&#13;/gi, '\r');
+}
+
+/**
+ * 宽松字符串转数字；空值返回空字符串，便于直接写表。
+ */
+function toNum_(v) {
+  if (v === '' || v === null || v === undefined) return '';
+  var n = Number(String(v).replace(/,/g, ''));
+  return isNaN(n) ? '' : n;
+}
+
+/**
+ * 宽松字符串清洗。
+ */
+function toStr_(v) {
+  return v == null ? '' : String(v).trim();
+}
+
+function isBlank_(v) {
+  return v === '' || v === null || v === undefined;
+}
+
+function safeSlice_(s, len) {
+  s = String(s == null ? '' : s);
+  return s.length <= len ? s : s.slice(0, len);
+}
+
+/**
+ * 统一 yyyy-MM-dd HH:mm:ss。
+ */
+function formatDateTime_(d) {
+  if (!(d instanceof Date)) d = new Date(d);
+  return Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
+}
+
+/**
+ * 统一按首列 date 查找 / 覆盖 / 追加。
+ */
+function upsertRowByDate_(sheet, dateStr, rowValues) {
+  var lastRow = sheet.getLastRow();
+  if (lastRow > 1) {
+    var values = sheet.getRange(2, 1, lastRow - 1, 1).getDisplayValues();
+    for (var i = 0; i < values.length; i++) {
+      if (normYMD_(values[i][0]) === dateStr) {
+        sheet.getRange(i + 2, 1, 1, rowValues.length).setValues([rowValues]);
+        return 'updated';
+      }
+    }
+  }
+  sheet.appendRow(rowValues);
+  return 'inserted';
+}
+
+
+/**
+ * 兼容旧版货币市场抓取包装。
+ */
+function fetchWithFallback_(url, options) {
+  return safeFetch_(url, options, 3);
+}
+
+/**
+ * 兼容海外宏观模块的请求包装。
+ */
+function fetchOverseasMacroUrl_(url, options) {
+  return safeFetch_(url, options, 3);
+}
+
+function safeSliceOverseas_(s, len) {
+  return safeSlice_(s, len);
+}

@@ -1,11 +1,132 @@
 /********************
- * 14_raw_backfill.js
- * 历史回补、断点续跑与派生表重建。
+ * 20_raw_curve.js
+ * 中债收益率曲线原始表。
+ *
+ * 职责：
+ * 1) 调用 10_source_chinabond.js 抓取曲线
+ * 2) 维护“原始_收益率曲线”表头与固定期限落表
+ * 3) 提供历史回补、断点续跑入口
  ********************/
 
+
+function runDailyWide_(date) {
+  var ss = SpreadsheetApp.getActive();
+  var sheet = ss.getSheetByName(SHEET_CURVE_RAW) || ss.insertSheet(SHEET_CURVE_RAW);
+
+  ensureCurveHeader_(sheet);
+
+  var index = buildCurveIndex_(sheet);
+  var batchCurves = CURVES.filter(function(c) {
+    return !c.fetch_separately;
+  });
+  var singleCurves = CURVES.filter(function(c) {
+    return !!c.fetch_separately;
+  });
+
+  Logger.log('曲线数: total=' + CURVES.length + ' batch=' + batchCurves.length + ' single=' + singleCurves.length);
+
+  var batchBlocks = [];
+  var usedBlockIndex = {};
+  if (batchCurves.length) {
+    var batchIds = batchCurves.map(function(c) {
+      return c.id;
+    });
+    var html = fetchChinaBondCurves_(date, batchIds);
+    batchBlocks = parseChinaBondCurveBlocks_(html);
+  }
+
+  var inserted = 0;
+  var skipped = 0;
+  var failed = 0;
+
+  for (var i = 0; i < CURVES.length; i++) {
+    var curve = CURVES[i];
+    var key = date + '|' + curve.name;
+
+    if (index.has(key)) {
+      Logger.log('⏭ 跳过(已存在): ' + key);
+      skipped++;
+      continue;
+    }
+
+    var matched = null;
+    if (curve.fetch_separately) {
+      matched = fetchChinaBondCurveSeparately_(date, curve);
+    } else {
+      matched = resolveCurveBlock_(curve, batchBlocks, usedBlockIndex, findCurveRequestIndex_(batchCurves, curve.name));
+    }
+
+    var map = matched ? matched.map : null;
+    if (!map || map.size === 0) {
+      Logger.log('❌ 无数据/未解析到: ' + curve.name + ' id=' + curve.id + ' mode=' + (curve.fetch_separately ? 'single' : 'batch'));
+      failed++;
+      continue;
+    }
+
+    try {
+      appendCurveRowFixed_(sheet, date, curve.name, map);
+      Logger.log('✅ 插入: ' + key + ' 节点=' + map.size + ' sourceTitle=' + matched.title + ' mode=' + (curve.fetch_separately ? 'single' : 'batch'));
+      inserted++;
+    } catch (e) {
+      Logger.log('❌ 插入失败: ' + key + ' err=' + e);
+      failed++;
+    }
+  }
+
+  Logger.log('yc_curve 新增=' + inserted + ' 跳过=' + skipped + ' 失败=' + failed);
+}
+
 /**
- * 按日期区间顺序回补 yc_curve，并在结束后重建派生表。
+ * 抓取中债收益率曲线原始 HTML，并使用脚本缓存减少重复请求。
  */
+
+
+function ensureCurveHeader_(sheet) {
+  if (sheet.getLastRow() > 0) return;
+
+  var header = ['date', 'curve'];
+  for (var i = 0; i < TERMS.length; i++) {
+    header.push('Y_' + TERMS[i]);
+  }
+  sheet.appendRow(header);
+}
+
+/**
+ * 按 TERMS 固定列顺序追加一行曲线数据。
+ */
+
+
+function appendCurveRowFixed_(sheet, date, curveName, map) {
+  var row = [date, curveName];
+  for (var i = 0; i < TERMS.length; i++) {
+    var term = TERMS[i];
+    row.push(map.has(term) ? map.get(term) : '');
+  }
+  sheet.appendRow(row);
+}
+
+/**
+ * 构建 date|curve 唯一键索引，用于避免重复写入。
+ */
+
+
+function buildCurveIndex_(sheet) {
+  var last = sheet.getLastRow();
+  var set = new Set();
+  if (last < 2) return set;
+
+  var values = sheet.getRange(2, 1, last - 1, 2).getValues();
+  for (var i = 0; i < values.length; i++) {
+    var dateValue = values[i][0];
+    var curveName = values[i][1];
+    if (!dateValue || !curveName) continue;
+    set.add(normYMD_(dateValue) + '|' + curveName);
+  }
+  return set;
+}
+
+
+
 function backfill(startDate, endDate) {
   var start = parseYMD_(startDate);
   var end = parseYMD_(endDate);
@@ -65,6 +186,8 @@ function backfill(startDate, endDate) {
 /**
  * 回补最近若干天的数据。
  */
+
+
 function backfillRecentDays_(days) {
   days = days || 120;
   var end = new Date();
@@ -76,6 +199,8 @@ function backfillRecentDays_(days) {
 /**
  * 回补最近 120 天的数据。
  */
+
+
 function backfillLast120Days() {
   backfillRecentDays_(120);
 }
@@ -86,6 +211,8 @@ function backfillLast120Days() {
  * - resetCursor=false 时从 BACKFILL_CURSOR 继续
  * - maxDaysPerRun 表示最多处理多少个非周末日期
  */
+
+
 function backfillBatch_(startDate, endDate, maxDaysPerRun, resetCursor) {
   maxDaysPerRun = maxDaysPerRun || 8;
 
@@ -152,6 +279,8 @@ function backfillBatch_(startDate, endDate, maxDaysPerRun, resetCursor) {
 /**
  * 统计 yc_curve 当前行数。
  */
+
+
 function countCurveRows_() {
   var ss = SpreadsheetApp.getActive();
   var sh = ss.getSheetByName(SHEET_CURVE_RAW);
@@ -162,6 +291,8 @@ function countCurveRows_() {
 /**
  * 读取回补游标。
  */
+
+
 function getBackfillCursor_() {
   return PropertiesService.getScriptProperties().getProperty('BACKFILL_CURSOR') || '';
 }
@@ -169,6 +300,8 @@ function getBackfillCursor_() {
 /**
  * 写入回补游标。
  */
+
+
 function setBackfillCursor_(dateStr) {
   PropertiesService.getScriptProperties().setProperty('BACKFILL_CURSOR', dateStr);
 }
@@ -176,6 +309,9 @@ function setBackfillCursor_(dateStr) {
 /**
  * 清空回补游标。
  */
+
+
 function clearBackfillCursor_() {
   PropertiesService.getScriptProperties().deleteProperty('BACKFILL_CURSOR');
 }
+

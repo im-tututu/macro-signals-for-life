@@ -1,5 +1,5 @@
 /********************
- * 12_raw_futures.js
+ * 23_raw_futures.js
  * 国债期货原始行情抓取。
  *
  * 当前使用新浪接口抓取 T0 / TF0 连续合约近似价格，
@@ -30,32 +30,3 @@ function ensureFuturesHeader_(sheet) {
   if (sheet.getLastRow() > 0) return;
   sheet.appendRow(["date", "T0_last", "TF0_last", "source", "fetched_at"]);
 }
-
-function fetchSinaFuturePrice_(symbol) {
-  var url = "https://hq.sinajs.cn/list=" + encodeURIComponent(symbol);
-  var res = safeFetch_(url, {
-    method: "get",
-    headers: {
-      "User-Agent": "Mozilla/5.0",
-      "Referer": "https://finance.sina.com.cn/"
-    }
-  }, 4);
-
-  var txt = res.getContentText();
-  var m = txt.match(/="([^"]*)"/);
-  if (!m) return "";
-
-  var arr = m[1].split(",");
-
-  if (arr.length > 3) {
-    var p = parseFloat(arr[3]);
-    if (!isNaN(p) && p > 0) return p;
-  }
-
-  for (var j = 0; j < arr.length; j++) {
-    var v2 = parseFloat(arr[j]);
-    if (!isNaN(v2) && v2 > 0) return v2;
-  }
-  return "";
-}
-

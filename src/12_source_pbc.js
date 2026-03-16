@@ -1,108 +1,13 @@
 /********************
- * 14_raw_policy_rate.gs
- * 政策利率原始事件抓取
+ * 12_source_pbc.js
+ * 央行 / PBC 来源适配层。
  *
- * 表名：原始_政策利率
- * 常量：SHEET_POLICY_RATE_RAW
- *
- * 事件表字段：
- * date
- * type        // OMO / MLF / LPR
- * term        // 7D / 1Y / 5Y+
- * rate        // %
- * amount      // 亿元；LPR为空
- * source
- * fetched_at
- * note
+ * 负责：
+ * - 公告列表页抓取
+ * - OMO / MLF / LPR 明细解析
+ * - 文本、HTML、链接归一化
  ********************/
 
-var RAW_POLICY_RATE_HEADERS = [
-  "date",
-  "type",
-  "term",
-  "rate",
-  "amount",
-  "source",
-  "fetched_at",
-  "note"
-];
-
-var POLICY_RATE_SOURCE_CONFIG = {
-  omo_list_url: "https://www.pbc.gov.cn/zhengcehuobisi/125207/125213/125431/125475/index.html",
-  mlf_list_url: "https://www.pbc.gov.cn/zhengcehuobisi/125207/125213/125437/125446/125873/index.html",
-  lpr_list_url: "https://www.pbc.gov.cn/zhengcehuobisi/125207/125213/125440/3876551/index.html"
-};
-
-/* =========================
- * 对外入口
- * ========================= */
-
-function initRawPolicyRateSheet() {
-  prEnsureRawPolicyRateSheet_();
-  Logger.log("已初始化表：" + SHEET_POLICY_RATE_RAW);
-}
-
-function testFetchLatestPolicyRates() {
-  var events = prFetchLatestPolicyRateEvents_();
-  Logger.log(JSON.stringify(events, null, 2));
-}
-
-function syncRawPolicyRateLatest() {
-  var sheet = prEnsureRawPolicyRateSheet_();
-  var events = prFetchLatestPolicyRateEvents_();
-  var inserted = 0;
-  var updated = 0;
-
-  for (var i = 0; i < events.length; i++) {
-    var e = events[i];
-    if (!e.date || !e.type || !e.term) continue;
-
-    var existed = prFindPolicyRateEventRow_(sheet, e.date, e.type, e.term);
-    prUpsertPolicyRateEvent_(sheet, e);
-    if (existed) updated++;
-    else inserted++;
-  }
-
-  prSortRawPolicyRateSheet_(sheet);
-  Logger.log("政策利率最新事件同步完成 inserted=" + inserted + ", updated=" + updated);
-}
-
-function backfillPolicyRateRecent(omoLimit, mlfLimit, lprLimit) {
-  omoLimit = Number(omoLimit || 30);
-  mlfLimit = Number(mlfLimit || 200);
-  lprLimit = Number(lprLimit || 240);
-
-  var sheet = prEnsureRawPolicyRateSheet_();
-  var events = []
-    .concat(prFetchRecentOmoEvents_(omoLimit))
-    .concat(prFetchRecentMlfEvents_(mlfLimit))
-    .concat(prFetchRecentLprEvents_(lprLimit));
-
-  var inserted = 0;
-  var updated = 0;
-
-  for (var i = 0; i < events.length; i++) {
-    var e = events[i];
-    if (!e.date || !e.type || !e.term) continue;
-
-    var existed = prFindPolicyRateEventRow_(sheet, e.date, e.type, e.term);
-    prUpsertPolicyRateEvent_(sheet, e);
-    if (existed) updated++;
-    else inserted++;
-  }
-
-  prSortRawPolicyRateSheet_(sheet);
-  Logger.log("政策利率近期事件回补完成 inserted=" + inserted + ", updated=" + updated + ", total=" + events.length);
-}
-
-function readRawPolicyRateEvents_() {
-  var sheet = prEnsureRawPolicyRateSheet_();
-  return prReadPolicyRateRows_(sheet);
-}
-
-/* =========================
- * 最新抓取
- * ========================= */
 
 function prFetchLatestPolicyRateEvents_() {
   var events = [];
@@ -173,6 +78,7 @@ function prFetchLatestPolicyRateEvents_() {
   return events;
 }
 
+
 function prFetchLatestOmo7d_() {
   var events = prFetchRecentOmoEvents_(1);
   if (!events.length) throw new Error("未找到最新 7 天 OMO 利率");
@@ -186,6 +92,7 @@ function prFetchLatestOmo7d_() {
   };
 }
 
+
 function prFetchLatestMlf1y_() {
   var events = prFetchRecentMlfEvents_(1);
   if (!events.length) throw new Error("未找到最新 1Y MLF 中标利率");
@@ -198,6 +105,7 @@ function prFetchLatestMlf1y_() {
     title: events[0].note
   };
 }
+
 
 function prFetchLatestLpr_() {
   var events = prFetchRecentLprEvents_(1);
@@ -229,6 +137,7 @@ function prFetchLatestLpr_() {
 /* =========================
  * 近期回补
  * ========================= */
+
 
 function prFetchRecentOmoEvents_(limit) {
   var items = prListOmoArticles_();
@@ -267,6 +176,7 @@ function prFetchRecentOmoEvents_(limit) {
   return prDedupePolicyRateEvents_(out);
 }
 
+
 function prFetchRecentMlfEvents_(limit) {
   var items = prListMlfArticles_();
   var out = [];
@@ -300,6 +210,7 @@ function prFetchRecentMlfEvents_(limit) {
 
   return prDedupePolicyRateEvents_(out).slice(0, limit);
 }
+
 
 function prFetchRecentLprEvents_(limit) {
   var items = prListLprArticles_();
@@ -354,6 +265,7 @@ function prFetchRecentLprEvents_(limit) {
  * 栏目列表
  * ========================= */
 
+
 function prListOmoArticles_() {
   var html = prFetchHtml_(POLICY_RATE_SOURCE_CONFIG.omo_list_url);
   var anchors = prExtractAnchorsInOrder_(html, POLICY_RATE_SOURCE_CONFIG.omo_list_url);
@@ -381,6 +293,7 @@ function prListOmoArticles_() {
   return out;
 }
 
+
 function prListMlfArticles_() {
   var html = prFetchHtml_(POLICY_RATE_SOURCE_CONFIG.mlf_list_url);
   var anchors = prExtractAnchorsInOrder_(html, POLICY_RATE_SOURCE_CONFIG.mlf_list_url);
@@ -406,6 +319,7 @@ function prListMlfArticles_() {
 
   return out;
 }
+
 
 function prListLprArticles_() {
   var html = prFetchHtml_(POLICY_RATE_SOURCE_CONFIG.lpr_list_url);
@@ -436,6 +350,7 @@ function prListLprArticles_() {
 /* =========================
  * 详情页解析
  * ========================= */
+
 
 function prParseOmoDetail_(html) {
   if (!html) return null;
@@ -505,6 +420,7 @@ function prParseOmoDetail_(html) {
   };
 }
 
+
 function prParseMlfDetail_(html) {
   if (!html) return null;
 
@@ -536,6 +452,7 @@ function prParseMlfDetail_(html) {
     rate: rate
   };
 }
+
 
 function prParseLprDetail_(html) {
   if (!html) return null;
@@ -570,6 +487,7 @@ function prParseLprDetail_(html) {
  * 通用抓取/解析
  * ========================= */
 
+
 function prFetchHtml_(url) {
   var lastError = null;
 
@@ -599,6 +517,7 @@ function prFetchHtml_(url) {
   throw lastError || new Error("请求失败: " + url);
 }
 
+
 function prExtractAnchorsInOrder_(html, baseUrl) {
   var out = [];
   var re = /<a\b[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/ig;
@@ -619,6 +538,7 @@ function prExtractAnchorsInOrder_(html, baseUrl) {
   return out;
 }
 
+
 function prExtractArticleDate_(text) {
   if (!text) return "";
 
@@ -633,6 +553,7 @@ function prExtractArticleDate_(text) {
   return "";
 }
 
+
 function prExtractSeqNo_(title) {
   var m = String(title || "").match(/第(\d+)号/);
   return m ? Number(m[1]) : 0;
@@ -642,138 +563,16 @@ function prExtractSeqNo_(title) {
  * 表读写
  * ========================= */
 
-function prEnsureRawPolicyRateSheet_() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheetByName(SHEET_POLICY_RATE_RAW);
-  if (!sheet) sheet = ss.insertSheet(SHEET_POLICY_RATE_RAW);
-
-  var needInit = false;
-
-  if (sheet.getLastRow() < 1) {
-    needInit = true;
-  } else {
-    var existing = sheet.getRange(1, 1, 1, RAW_POLICY_RATE_HEADERS.length).getValues()[0];
-    for (var i = 0; i < RAW_POLICY_RATE_HEADERS.length; i++) {
-      if (String(existing[i] || "") !== RAW_POLICY_RATE_HEADERS[i]) {
-        needInit = true;
-        break;
-      }
-    }
-  }
-
-  if (needInit) {
-    sheet.clear();
-    sheet.getRange(1, 1, 1, RAW_POLICY_RATE_HEADERS.length).setValues([RAW_POLICY_RATE_HEADERS]);
-    sheet.setFrozenRows(1);
-  }
-
-  return sheet;
-}
-
-function prReadPolicyRateRows_(sheet) {
-  var lastRow = sheet.getLastRow();
-  if (lastRow < 2) return [];
-
-  var vals = sheet.getRange(2, 1, lastRow - 1, RAW_POLICY_RATE_HEADERS.length).getValues();
-  var rows = [];
-
-  for (var i = 0; i < vals.length; i++) {
-    var v = vals[i];
-    if (!v[0]) continue;
-
-    rows.push({
-      _rowNum: i + 2,
-      date: String(v[0] || ""),
-      type: String(v[1] || ""),
-      term: String(v[2] || ""),
-      rate: v[3],
-      amount: v[4],
-      source: String(v[5] || ""),
-      fetched_at: v[6],
-      note: String(v[7] || "")
-    });
-  }
-
-  rows.sort(function(a, b) {
-    if (a.date !== b.date) return a.date < b.date ? -1 : 1;
-    if (a.type !== b.type) return a.type < b.type ? -1 : 1;
-    return a.term < b.term ? -1 : a.term > b.term ? 1 : 0;
-  });
-
-  return rows;
-}
-
-function prFindPolicyRateEventRow_(sheet, date, type, term) {
-  var rows = prReadPolicyRateRows_(sheet);
-  for (var i = 0; i < rows.length; i++) {
-    if (rows[i].date === date && rows[i].type === type && rows[i].term === term) {
-      return rows[i]._rowNum;
-    }
-  }
-  return null;
-}
-
-function prUpsertPolicyRateEvent_(sheet, rowObj) {
-  if (!rowObj || !rowObj.date || !rowObj.type || !rowObj.term) return;
-
-  var rowNum = prFindPolicyRateEventRow_(sheet, rowObj.date, rowObj.type, rowObj.term);
-
-  var arr = [[
-    rowObj.date,
-    rowObj.type,
-    rowObj.term,
-    rowObj.rate,
-    rowObj.amount,
-    rowObj.source,
-    rowObj.fetched_at,
-    rowObj.note
-  ]];
-
-  if (rowNum) {
-    sheet.getRange(rowNum, 1, 1, RAW_POLICY_RATE_HEADERS.length).setValues(arr);
-  } else {
-    sheet.getRange(sheet.getLastRow() + 1, 1, 1, RAW_POLICY_RATE_HEADERS.length).setValues(arr);
-  }
-}
-
-function prSortRawPolicyRateSheet_(sheet) {
-  var lastRow = sheet.getLastRow();
-  if (lastRow <= 2) return;
-
-  sheet.getRange(2, 1, lastRow - 1, RAW_POLICY_RATE_HEADERS.length)
-    .sort([
-      { column: 1, ascending: true },
-      { column: 2, ascending: true },
-      { column: 3, ascending: true }
-    ]);
-}
-
-/* =========================
- * 工具函数
- * ========================= */
-
-function prDedupePolicyRateEvents_(events) {
-  var out = [];
-  var seen = {};
-
-  for (var i = 0; i < events.length; i++) {
-    var e = events[i];
-    var key = e.date + "||" + e.type + "||" + e.term;
-    if (seen[key]) continue;
-    seen[key] = true;
-    out.push(e);
-  }
-
-  return out;
-}
 
 function prFormatPolicyDateTime_(d) {
   return Utilities.formatDate(d, Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm:ss");
 }
 
+
 function prPad2_(n) {
   return n < 10 ? "0" + n : String(n);
 }
+
 
 function prNormalizePolicyTextKeepLines_(s) {
   return String(s || "")
@@ -784,6 +583,7 @@ function prNormalizePolicyTextKeepLines_(s) {
     .trim();
 }
 
+
 function prCleanText_(s) {
   return String(s || "")
     .replace(/\u00A0/g, " ")
@@ -791,31 +591,19 @@ function prCleanText_(s) {
     .trim();
 }
 
+
 function prNormalizeWhitespace_(s) {
   return prCleanText_(s);
 }
 
 function prStripHtml_(html) {
-  return String(html || "")
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<\/(p|div|tr|td|th|table|h1|h2|h3|h4|h5|li)\s*>/gi, "\n")
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&#160;/gi, " ")
-    .replace(/&ensp;|&emsp;/gi, " ");
+  return stripTags_(decodeHtmlText_(html));
 }
 
 function prHtmlDecode_(s) {
-  return String(s || "")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, "\"")
-    .replace(/&#39;/g, "'")
-    .replace(/&#x2F;/g, "/");
+  return decodeHtmlText_(s);
 }
+
 
 function prToAbsoluteUrl_(href, baseUrl) {
   if (/^https?:\/\//i.test(href)) return href;
@@ -827,3 +615,4 @@ function prToAbsoluteUrl_(href, baseUrl) {
   if (href.indexOf("/") === 0) return origin + href;
   return base + href.replace(/^\.\//, "");
 }
+

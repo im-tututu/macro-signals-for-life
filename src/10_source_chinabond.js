@@ -1,96 +1,16 @@
 /********************
- * 10_raw_curve.js
- * 中债收益率曲线抓取、解析与落表。
+ * 10_source_chinabond.js
+ * Chinabond / 中债来源适配层。
+ *
+ * 职责：
+ * 1) 请求中债收益率曲线原始页面
+ * 2) 解析 tablelist block
+ * 3) 处理曲线标题归一化与 block 匹配
+ *
+ * 说明：
+ * - 表格写入逻辑统一放在 20_raw_curve.js
+ * - 债券指数自定义公式统一放在 40_formula_chinabond_index.js
  ********************/
-
-/**
- * 抓取指定日期的多条收益率曲线并按固定期限落表。
- */
-function runDailyWide_(date) {
-  var ss = SpreadsheetApp.getActive();
-  var sheet = ss.getSheetByName(SHEET_CURVE_RAW) || ss.insertSheet(SHEET_CURVE_RAW);
-
-  ensureCurveHeader_(sheet);
-
-  var index = buildCurveIndex_(sheet);
-  var batchCurves = CURVES.filter(function(c) {
-    return !c.fetch_separately;
-  });
-  var singleCurves = CURVES.filter(function(c) {
-    return !!c.fetch_separately;
-  });
-
-  Logger.log('曲线数: total=' + CURVES.length + ' batch=' + batchCurves.length + ' single=' + singleCurves.length);
-
-  var batchBlocks = [];
-  var usedBlockIndex = {};
-  if (batchCurves.length) {
-    var batchIds = batchCurves.map(function(c) {
-      return c.id;
-    });
-    var html = fetchChinaBondCurves_(date, batchIds);
-    batchBlocks = parseChinaBondCurveBlocks_(html);
-  }
-
-  var inserted = 0;
-  var skipped = 0;
-  var failed = 0;
-
-  for (var i = 0; i < CURVES.length; i++) {
-    var curve = CURVES[i];
-    var key = date + '|' + curve.name;
-
-    if (index.has(key)) {
-      Logger.log('⏭ 跳过(已存在): ' + key);
-      skipped++;
-      continue;
-    }
-
-    var matched = null;
-    if (curve.fetch_separately) {
-      matched = fetchChinaBondCurveSeparately_(date, curve);
-    } else {
-      matched = resolveCurveBlock_(curve, batchBlocks, usedBlockIndex, findCurveRequestIndex_(batchCurves, curve.name));
-    }
-
-    var map = matched ? matched.map : null;
-    if (!map || map.size === 0) {
-      Logger.log('❌ 无数据/未解析到: ' + curve.name + ' id=' + curve.id + ' mode=' + (curve.fetch_separately ? 'single' : 'batch'));
-      failed++;
-      continue;
-    }
-
-    try {
-      appendCurveRowFixed_(sheet, date, curve.name, map);
-      Logger.log('✅ 插入: ' + key + ' 节点=' + map.size + ' sourceTitle=' + matched.title + ' mode=' + (curve.fetch_separately ? 'single' : 'batch'));
-      inserted++;
-    } catch (e) {
-      Logger.log('❌ 插入失败: ' + key + ' err=' + e);
-      failed++;
-    }
-  }
-
-  Logger.log('yc_curve 新增=' + inserted + ' 跳过=' + skipped + ' 失败=' + failed);
-}
-
-/**
- * 抓取中债收益率曲线原始 HTML，并使用脚本缓存减少重复请求。
- */
-function buildShortCacheKey_(prefix, dateStr, ids) {
-  var raw = prefix + '|' + dateStr + '|' + ids.join(',');
-  var digest = Utilities.computeDigest(
-    Utilities.DigestAlgorithm.MD5,
-    raw,
-    Utilities.Charset.UTF_8
-  );
-
-  var hex = digest.map(function(b) {
-    var v = (b < 0 ? b + 256 : b).toString(16);
-    return v.length === 1 ? '0' + v : v;
-  }).join('');
-
-  return prefix + '_' + dateStr.replace(/-/g, '') + '_' + hex;
-}
 
 
 function findCurveRequestIndex_(curves, curveName) {
@@ -99,6 +19,7 @@ function findCurveRequestIndex_(curves, curveName) {
   }
   return -1;
 }
+
 
 function fetchChinaBondCurveSeparately_(date, curve) {
   var html = fetchChinaBondCurves_(date, [curve.id]);
@@ -113,11 +34,12 @@ function fetchChinaBondCurveSeparately_(date, curve) {
   return blocks[0];
 }
 
+
 function fetchChinaBondCurves_(workTime, ycDefIds) {
   var url = 'https://yield.chinabond.com.cn/cbweb-mn/yc/ycDetail';
 
   var cache = CacheService.getScriptCache();
-  var cacheKey = buildShortCacheKey_('yc_detail', workTime, ycDefIds);
+  var cacheKey = buildShortCacheKey_('yc_detail', [workTime].concat(ycDefIds));
   var cached = cache.get(cacheKey);
   if (cached) return cached;
 
@@ -156,6 +78,8 @@ function fetchChinaBondCurves_(workTime, ycDefIds) {
 /**
  * 将页面中的标题表和数据表按顺序解析为 blocks。
  */
+
+
 function parseChinaBondCurveBlocks_(html) {
   var blocks = [];
   var pairRe = /<table[^>]*class="t1"[\s\S]*?<span>\s*([^<]+?)\s*<\/span>[\s\S]*?<\/table>\s*<table[^>]*class="tablelist"[\s\S]*?<\/table>/gi;
@@ -183,6 +107,8 @@ function parseChinaBondCurveBlocks_(html) {
 /**
  * 将页面标题与内部曲线名统一压缩成便于匹配的 key。
  */
+
+
 function buildCurveTitleKey_(text) {
   return String(text || '')
     .replace(/<[^>]+>/g, '')
@@ -223,6 +149,8 @@ function buildCurveTitleKey_(text) {
  * 根据 CURVES 配置的 name / aliases 与解析出的标题做匹配。
  * 先按别名匹配，匹配不到再按请求顺序兜底。
  */
+
+
 function resolveCurveBlock_(curve, blocks, usedBlockIndex, requestIndex) {
   var aliases = [curve.name].concat(curve.aliases || []);
   var aliasKeys = aliases.map(function(alias) {
@@ -257,6 +185,8 @@ function resolveCurveBlock_(curve, blocks, usedBlockIndex, requestIndex) {
 /**
  * 把 tablelist 表格解析为 term -> yield 的 Map。
  */
+
+
 function parseTableListToMap_(tableHtml) {
   var map = new Map();
   var rowRe = /<tr[\s\S]*?<\/tr>/gi;
@@ -286,42 +216,39 @@ function parseTableListToMap_(tableHtml) {
 /**
  * 确保 yc_curve 表头存在。
  */
-function ensureCurveHeader_(sheet) {
-  if (sheet.getLastRow() > 0) return;
 
-  var header = ['date', 'curve'];
-  for (var i = 0; i < TERMS.length; i++) {
-    header.push('Y_' + TERMS[i]);
-  }
-  sheet.appendRow(header);
+
+/**
+ * 获取中债单一指数查询结果 JSON。
+ * 供 40_formula_chinabond_index.js 中的自定义公式复用。
+ */
+function fetchChinabondIndexSeries_(indexid) {
+  var url = 'https://yield.chinabond.com.cn/cbweb-mn/indices/singleIndexQueryResult'
+    + '?indexid=' + encodeURIComponent(indexid)
+    + '&&qxlxt=00&&ltcslx=00&&zslxt=PJSZFJQ,PJSZFDQSYL,PJSZFTX'
+    + '&&zslxt1=PJSZFJQ,PJSZFDQSYL,PJSZFTX&&lx=1&&locale=';
+
+  return safeFetchJson_(url, {
+    method: 'post',
+    headers: {
+      accept: 'application/json, text/javascript, */*; q=0.01',
+      'x-requested-with': 'XMLHttpRequest'
+    }
+  }, 4);
 }
 
 /**
- * 按 TERMS 固定列顺序追加一行曲线数据。
+ * 取得时间序列中的最新一个点。
  */
-function appendCurveRowFixed_(sheet, date, curveName, map) {
-  var row = [date, curveName];
-  for (var i = 0; i < TERMS.length; i++) {
-    var term = TERMS[i];
-    row.push(map.has(term) ? map.get(term) : '');
-  }
-  sheet.appendRow(row);
-}
+function getLatestPoint_(series) {
+  if (!series || typeof series !== 'object') return null;
+  var keys = Object.keys(series);
+  if (!keys.length) return null;
 
-/**
- * 构建 date|curve 唯一键索引，用于避免重复写入。
- */
-function buildCurveIndex_(sheet) {
-  var last = sheet.getLastRow();
-  var set = new Set();
-  if (last < 2) return set;
-
-  var values = sheet.getRange(2, 1, last - 1, 2).getValues();
-  for (var i = 0; i < values.length; i++) {
-    var dateValue = values[i][0];
-    var curveName = values[i][1];
-    if (!dateValue || !curveName) continue;
-    set.add(normYMD_(dateValue) + '|' + curveName);
-  }
-  return set;
+  var latestTs = Math.max.apply(null, keys.map(Number));
+  return {
+    ts: latestTs,
+    date: Utilities.formatDate(new Date(latestTs), 'Asia/Shanghai', 'yyyy-MM-dd'),
+    value: series[String(latestTs)]
+  };
 }
