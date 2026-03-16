@@ -1,24 +1,16 @@
 /********************
  * 22_raw_money_market.js
+ * 银行间质押式回购利率原始表。
  *
- * 银行间质押式回购利率：
- * - 当天：prr-md.json（实时更新）
- * - 历史：prr-chrt.csv（历史回补）
+ * 数据源：
+ * - 当天：11_source_chinamoney.js 中的 prr-md.json
+ * - 历史：11_source_chinamoney.js 中的 prr-chrt.csv
  *
- * 本版原则：
- * 1) 保留原有整体结构，尽量少动其他文件
- * 2) 历史回补优化为：一次读入、建索引、内存更新、整块写回
- * 3) 当天更新优先根据接口日期落表，避免周末/节假日重复造行
- * 4) 日志明确说明：到底是新增、更新，还是无变化
- * 5) 兼容 safeFetch_，没有则回退 UrlFetchApp.fetch
+ * 本文件职责：
+ * - 维护原始_资金面表 schema
+ * - 写入/更新日内快照与历史回补
+ * - 不负责来源 URL 管理
  ********************/
-
-/**
- * 避免与其他文件重复定义时直接覆盖
- */
-if (typeof SHEET_MONEY_MARKET_RAW === "undefined") {
-  var SHEET_MONEY_MARKET_RAW = "原始_资金面";
-}
 
 /**
  * money_market 表头
@@ -193,7 +185,7 @@ function backfillMoneyMarket(startDate, endDate) {
     "https://www.chinamoney.com.cn/r/cms/www/chinamoney/data/currency/prr-chrt.csv?t=" +
     Date.now();
 
-  var res = fetchWithFallback_(url, {
+  var res = safeFetch_(url, {
     method: "get",
     muteHttpExceptions: true
   });

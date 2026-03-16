@@ -8,37 +8,83 @@
  * - FRED（独立来源文件）
  * - Alpha Vantage（放在 external misc 中）
  * - 国家统计局 / SGE / BOC / 余额宝（先预留来源接口与民生资产表抓取入口）
+ *
+ * 约定：
+ * - 原始表 schema 留在本文件
+ * - 各来源自己的 URL、序列映射、接口常量统一放在对应 source 文件
  ********************/
 
-/********************
- * 15_raw_overseas_macro.js
- *
- * 原始_海外宏观
- * ------------------
- * 这张表的职责是沉淀“海外宏观背景”的原始输入，不在这里直接做解释性判断。
- *
- * 当前字段分成两组来源：
- * 1) FRED
- *    - 联邦基金目标区间、SOFR、2Y / 10Y 美债、10Y 实际利率
- *    - 广义美元指数、美元兑人民币、VIX、SPX、NASDAQ100
- * 2) Alpha Vantage
- *    - 黄金、WTI、Brent、铜
- *
- * 设计原则：
- * 1) 抓取前先检查今天是否已经抓过；今天抓过就直接跳过
- * 2) 判重看 fetched_at 的日期，而不是 date
- *    - 原因：海外数据存在时区差，今天抓到的数据 observation date 可能仍是美国上一交易日
- * 3) 两个数据源分开函数抓，方便排错与后续替换
- * 4) API key 不写在代码里
- *    - 运行时统一从 Script Properties 读取
- *    - GitHub Actions 可通过 setApiKeysFromParams() 写入 Script Properties
- * 5) 未配置 secrets 时不抛错，不阻塞现有国内数据日更流程
- ********************/
+var OVERSEAS_MACRO_HEADERS = [
+  'date',
+  'fed_upper',
+  'fed_lower',
+  'sofr',
+  'ust_2y',
+  'ust_10y',
+  'us_real_10y',
+  'usd_broad',
+  'usd_cny',
+  'gold',
+  'wti',
+  'brent',
+  'copper',
+  'vix',
+  'spx',
+  'nasdaq_100',
+  'source',
+  'fetched_at'
+];
+
+var OVERSEAS_MACRO_COL = {
+  date: 0,
+  fed_upper: 1,
+  fed_lower: 2,
+  sofr: 3,
+  ust_2y: 4,
+  ust_10y: 5,
+  us_real_10y: 6,
+  usd_broad: 7,
+  usd_cny: 8,
+  gold: 9,
+  wti: 10,
+  brent: 11,
+  copper: 12,
+  vix: 13,
+  spx: 14,
+  nasdaq_100: 15,
+  source: 16,
+  fetched_at: 17
+};
+
+var LIFE_ASSET_HEADERS = [
+  'date',
+  'mortgage_rate_est',
+  'house_price_tier1',
+  'house_price_tier2',
+  'house_price_nbs_70city',
+  'gold_cny',
+  'money_fund_7d',
+  'deposit_1y',
+  'source',
+  'fetched_at'
+];
+
+var LIFE_ASSET_COL = {
+  date: 0,
+  mortgage_rate_est: 1,
+  house_price_tier1: 2,
+  house_price_tier2: 3,
+  house_price_nbs_70city: 4,
+  gold_cny: 5,
+  money_fund_7d: 6,
+  deposit_1y: 7,
+  source: 8,
+  fetched_at: 9
+};
 
 /**
  * 手工测试入口：默认遵循“今天已抓过则跳过”。
  */
-
 
 function testOverseasMacro() {
   return forceFetchOverseasMacro_();
@@ -129,7 +175,7 @@ function fetchOverseasMacro_(forceRefresh) {
     pickObsDate_(fredData.sofr) ||
     formatDate_(new Date());
 
-  var fetchedAt = formatDateTimeOverseas_(new Date());
+  var fetchedAt = formatDateTime_(new Date());
 
   /**
    * 拼成最终一行。
@@ -378,21 +424,6 @@ function upsertOverseasMacroRowByDate_(sheet, dateStr, row) {
  * ========================= */
 
 /**
- * 抓取兼容层：
- * - 有 fetchWithFallback_ 就优先用
- * - 否则有 safeFetch_ 就用 safeFetch_
- * - 再否则回退 UrlFetchApp.fetch
- *
- * 这样能最大程度兼容你当前仓库已有的网络请求封装。
- */
-
-
-function formatDateTimeOverseas_(d) {
-  if (!(d instanceof Date)) d = new Date(d);
-  return Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
-}
-
-/**
  * 从 observation 对象中安全取 value。
  */
 
@@ -451,7 +482,7 @@ function buildOverseasMacroSourceNote_(fredData, alphaData) {
  * ========================= */
 
 /**
- * 当前仓库已在 config 中保留 LIFE_ASSET_* 常量，但原始实现尚未提交。
+ * 当前 LIFE_ASSET 原始表 schema 统一留在本文件，具体来源 URL 分散在对应 source 文件。
  * 为了让主流程稳定，这里先提供“可安全跳过”的最小实现：
  * - 会初始化表头
  * - 不会因未实现具体抓取而中断主流程

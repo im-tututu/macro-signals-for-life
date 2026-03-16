@@ -68,6 +68,59 @@ function normYMD_(v) {
 /**
  * 返回今天的 yyyy-MM-dd。
  */
+
+/**
+ * 从任意文本中提取日期，返回 yyyy-MM-dd。
+ */
+function extractDateFromAnyText_(v) {
+  if (v === null || v === undefined || v === '') return '';
+
+  if (v instanceof Date && !isNaN(v.getTime())) {
+    return formatDate_(v);
+  }
+
+  var s = String(v).trim();
+  if (!s) return '';
+
+  var m = s.match(/(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/);
+  if (m) {
+    return m[1] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[3]).slice(-2);
+  }
+
+  m = s.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/);
+  if (m) {
+    return m[1] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[3]).slice(-2);
+  }
+
+  return '';
+}
+
+/**
+ * 统一日期字符串。
+ */
+function normalizeDateKey_(v) {
+  if (v === null || v === undefined || v === '') return '';
+
+  if (v instanceof Date && !isNaN(v.getTime())) {
+    return formatDate_(v);
+  }
+
+  var s = String(v).trim();
+  if (!s) return '';
+
+  var m4 = s.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})$/);
+  if (m4) {
+    return m4[1] + '-' + ('0' + m4[2]).slice(-2) + '-' + ('0' + m4[3]).slice(-2);
+  }
+
+  var m2 = s.match(/^(\d{2})[-\/.](\d{1,2})[-\/.](\d{1,2})$/);
+  if (m2) {
+    return '20' + m2[1] + '-' + ('0' + m2[2]).slice(-2) + '-' + ('0' + m2[3]).slice(-2);
+  }
+
+  return s;
+}
+
 function today_() {
   return formatDate_(new Date());
 }
@@ -365,23 +418,4 @@ function upsertRowByDate_(sheet, dateStr, rowValues) {
   }
   sheet.appendRow(rowValues);
   return 'inserted';
-}
-
-
-/**
- * 兼容旧版货币市场抓取包装。
- */
-function fetchWithFallback_(url, options) {
-  return safeFetch_(url, options, 3);
-}
-
-/**
- * 兼容海外宏观模块的请求包装。
- */
-function fetchOverseasMacroUrl_(url, options) {
-  return safeFetch_(url, options, 3);
-}
-
-function safeSliceOverseas_(s, len) {
-  return safeSlice_(s, len);
 }

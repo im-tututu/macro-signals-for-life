@@ -8,24 +8,6 @@
  * 3) 暴露最新同步与历史回补入口
  ********************/
 
-/********************
- * 14_raw_policy_rate.js
- * 政策利率原始事件抓取
- *
- * 表名：原始_政策利率
- * 常量：SHEET_POLICY_RATE_RAW
- *
- * 事件表字段：
- * date
- * type        // OMO / MLF / LPR
- * term        // 7D / 1Y / 5Y+
- * rate        // %
- * amount      // 亿元；LPR为空
- * source
- * fetched_at
- * note
- ********************/
-
 var RAW_POLICY_RATE_HEADERS = [
   "date",
   "type",
@@ -36,12 +18,6 @@ var RAW_POLICY_RATE_HEADERS = [
   "fetched_at",
   "note"
 ];
-
-var POLICY_RATE_SOURCE_CONFIG = {
-  omo_list_url: "https://www.pbc.gov.cn/zhengcehuobisi/125207/125213/125431/125475/index.html",
-  mlf_list_url: "https://www.pbc.gov.cn/zhengcehuobisi/125207/125213/125437/125446/125873/index.html",
-  lpr_list_url: "https://www.pbc.gov.cn/zhengcehuobisi/125207/125213/125440/3876551/index.html"
-};
 
 /* =========================
  * 对外入口

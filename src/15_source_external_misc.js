@@ -12,6 +12,18 @@
  * - 余额宝 / 货基代理值
  ********************/
 
+var ALPHA_VANTAGE_QUERY_URL = 'https://www.alphavantage.co/query';
+var OVERSEAS_MACRO_ALPHA_SERIES = {
+  gold: { fn: 'GOLD_SILVER_HISTORY', symbol: 'GOLD', interval: 'daily' },
+  wti: { fn: 'WTI', interval: 'daily' },
+  brent: { fn: 'BRENT', interval: 'daily' },
+  copper: { fn: 'COPPER', interval: 'monthly' }
+};
+
+var SINA_FUTURES_QUOTE_URL = 'https://hq.sinajs.cn/list=';
+var SGE_HOME_URL = 'https://www.sge.com.cn/';
+var BOC_DEPOSIT_RATE_URL = 'https://www.bankofchina.com/fimarkets/lilv/fd31/';
+var MONEY_FUND_PROXY_URL = 'https://fundf10.eastmoney.com/jjjz_000198.html';
 
 function fetchOverseasMacroFromAlphaVantage_() {
   var apiKey = getRequiredSecret_('ALPHA_VANTAGE_API_KEY');
@@ -34,11 +46,6 @@ function fetchOverseasMacroFromAlphaVantage_() {
       out[field] = null;
     }
 
-    /**
-     * 免费层限频保护：
-     * - 官方返回已明确提示 1 request per second
-     * - 这里留 1.2 秒缓冲，尽量避免边界抖动
-     */
     if (i < fields.length - 1) {
       Utilities.sleep(1200);
     }
@@ -46,14 +53,6 @@ function fetchOverseasMacroFromAlphaVantage_() {
 
   return out;
 }
-
-/**
- * 获取单个 Alpha Vantage 商品序列最近 observation。
- *
- * 重要：
- * - Alpha Vantage 免费层超限时，常常不是 HTTP 4xx，而是在 JSON 里返回 Note / Information
- * - 所以这里必须同时检查 HTTP 状态码和 JSON 错误字段
- */
 
 /**
  * 获取单个 Alpha Vantage 商品序列最近 observation。
@@ -67,21 +66,19 @@ function fetchOverseasMacroFromAlphaVantage_() {
  *
  * 因此这里不能只写死 obs.value，而要做兼容提取。
  */
-
-
 function fetchAlphaVantageLatestObservation_(spec, apiKey) {
   var url = buildAlphaVantageUrl_(spec, apiKey);
 
-  var res = fetchOverseasMacroUrl_(url, {
+  var res = safeFetch_(url, {
     method: 'get',
     muteHttpExceptions: true
-  });
+  }, 3);
 
   if (res.getResponseCode() !== 200) {
     throw new Error(
       'Alpha Vantage HTTP=' + res.getResponseCode()
       + ' | fn=' + spec.fn
-      + ' | body=' + safeSliceOverseas_(res.getContentText(), 300)
+      + ' | body=' + safeSlice_(res.getContentText(), 300)
     );
   }
 
@@ -105,7 +102,7 @@ function fetchAlphaVantageLatestObservation_(spec, apiKey) {
   if (!data.length) {
     throw new Error(
       'Alpha Vantage data empty: ' + spec.fn
-      + ' | body=' + safeSliceOverseas_(body, 500)
+      + ' | body=' + safeSlice_(body, 500)
     );
   }
 
@@ -123,39 +120,19 @@ function fetchAlphaVantageLatestObservation_(spec, apiKey) {
     };
   }
 
-  /**
-   * 如果走到这里，说明 data 有内容，但没有找到可识别的数值字段。
-   * 把首条记录的 key 打出来，方便快速修正解析逻辑。
-   */
   var sample = data[0] || {};
   var sampleKeys = Object.keys(sample).join(',');
 
   throw new Error(
     'Alpha Vantage no valid observation: ' + spec.fn
     + ' | sample_keys=' + sampleKeys
-    + ' | sample=' + safeSliceOverseas_(JSON.stringify(sample), 500)
+    + ' | sample=' + safeSlice_(JSON.stringify(sample), 500)
   );
 }
 
-
-
-
-
 /**
  * 从 Alpha Vantage 单条 observation 中提取数值。
- *
- * 为什么要单独封装：
- * - 不同商品 function 的 JSON 字段名不完全一致
- * - 不能把所有接口都假定成 data[i].value
- *
- * 当前兼容顺序：
- * 1) value   - WTI / BRENT / COPPER 常见
- * 2) price   - GOLD / SILVER 类接口常见候选
- * 3) close   - 兜底兼容
- * 4) 其他常见命名再向后补
  */
-
-
 function extractAlphaVantageNumericValue_(obs) {
   if (!obs) return null;
 
@@ -177,23 +154,11 @@ function extractAlphaVantageNumericValue_(obs) {
   return null;
 }
 
-
-
-
 /**
  * 构造 Alpha Vantage 商品 URL。
- *
- * 目前支持：
- * - GOLD_SILVER_HISTORY
- * - WTI
- * - BRENT
- * - COPPER
  */
-
-
 function buildAlphaVantageUrl_(spec, apiKey) {
-  var url =
-    'https://www.alphavantage.co/query'
+  var url = ALPHA_VANTAGE_QUERY_URL
     + '?function=' + encodeURIComponent(spec.fn)
     + '&apikey=' + encodeURIComponent(apiKey);
 
@@ -206,30 +171,21 @@ function buildAlphaVantageUrl_(spec, apiKey) {
   return url;
 }
 
-/* =========================
- * Sheet helpers
- * ========================= */
-
-/**
- * 获取或创建 原始_海外宏观 工作表，并校验表头。
- */
-
-
 function fetchSinaFuturePrice_(symbol) {
-  var url = "https://hq.sinajs.cn/list=" + encodeURIComponent(symbol);
+  var url = SINA_FUTURES_QUOTE_URL + encodeURIComponent(symbol);
   var res = safeFetch_(url, {
-    method: "get",
+    method: 'get',
     headers: {
-      "User-Agent": "Mozilla/5.0",
-      "Referer": "https://finance.sina.com.cn/"
+      'User-Agent': 'Mozilla/5.0',
+      'Referer': 'https://finance.sina.com.cn/'
     }
   }, 4);
 
   var txt = res.getContentText();
   var m = txt.match(/="([^"]*)"/);
-  if (!m) return "";
+  if (!m) return '';
 
-  var arr = m[1].split(",");
+  var arr = m[1].split(',');
 
   if (arr.length > 3) {
     var p = parseFloat(arr[3]);
@@ -240,18 +196,17 @@ function fetchSinaFuturePrice_(symbol) {
     var v2 = parseFloat(arr[j]);
     if (!isNaN(v2) && v2 > 0) return v2;
   }
-  return "";
+  return '';
 }
 
-
 function fetchSgeGoldSnapshot_() {
-  return { date: '', gold_cny: '', source: LIFE_ASSET_SOURCE.sge_home || '' };
+  return { date: '', gold_cny: '', source: SGE_HOME_URL };
 }
 
 function fetchBocDeposit1ySnapshot_() {
-  return { date: '', deposit_1y: '', source: LIFE_ASSET_SOURCE.boc_deposit_list || '' };
+  return { date: '', deposit_1y: '', source: BOC_DEPOSIT_RATE_URL };
 }
 
 function fetchMoneyFund7dSnapshot_() {
-  return { date: '', money_fund_7d: '', source: LIFE_ASSET_SOURCE.money_fund_proxy_url || '' };
+  return { date: '', money_fund_7d: '', source: MONEY_FUND_PROXY_URL };
 }

@@ -3,15 +3,37 @@
  * Chinabond / 中债来源适配层。
  *
  * 职责：
- * 1) 请求中债收益率曲线原始页面
- * 2) 解析 tablelist block
- * 3) 处理曲线标题归一化与 block 匹配
+ * 1) 集中维护中债相关来源配置（URL、曲线定义）
+ * 2) 请求中债收益率曲线原始页面
+ * 3) 解析 tablelist block
+ * 4) 处理曲线标题归一化与 block 匹配
  *
  * 说明：
  * - 表格写入逻辑统一放在 20_raw_curve.js
  * - 债券指数自定义公式统一放在 40_formula_chinabond_index.js
  ********************/
 
+var CHINABOND_YC_DETAIL_URL = 'https://yield.chinabond.com.cn/cbweb-mn/yc/ycDetail';
+var CHINABOND_INDEX_SINGLE_QUERY_URL = 'https://yield.chinabond.com.cn/cbweb-mn/indices/singleIndexQueryResult';
+
+/**
+ * 中债曲线配置。
+ * 约定：
+ * - tier 仅用于固化分层，不影响现有表结构与指标/信号口径
+ * - fetch_separately=true 的曲线需要单独请求，不能与其他曲线合并抓取
+ */
+var CURVES = [
+  { name: '国债', id: '2c9081e50a2f9606010a3068cae70001', tier: 'main', aliases: ['国债收益率曲线', 'Government Bond'] },
+  { name: '国开债', id: '8a8b2ca037a7ca910137bfaa94fa5057', tier: 'main', aliases: ['国开债收益率曲线', '政策性金融债', 'Policy Bank'] },
+  { name: 'AAA信用', id: '2c9081e50a2f9606010a309f4af50111', tier: 'main', aliases: ['企业债收益率曲线(AAA)', '企业债AAA', 'Enterprise Bond AAA'] },
+  { name: 'AA+信用', id: '2c908188138b62cd01139a2ee6b51e25', tier: 'main', aliases: ['企业债收益率曲线(AA+)', '企业债收益率曲线(AA＋)', '企业债AA+', 'Enterprise Bond AA+'] },
+  { name: 'AAA+中票', id: '2c9081e9257ddf2a012590efdded1d35', tier: 'main', aliases: ['中短期票据收益率曲线(AAA+)', '中票AAA+', 'CP&Note AAA+'] },
+  { name: 'AAA中票', id: '2c9081880fa9d507010fb8505b393fe7', tier: 'main', aliases: ['中短期票据收益率曲线(AAA)', '中票AAA', 'CP&Note AAA'] },
+  { name: 'AAA存单', id: '8308218D1D030E0DE0540010E03EE6DA', tier: 'main', aliases: ['同业存单收益率曲线(AAA)', '存单AAA', 'NCD AAA', 'Negotiable CD AAA'] },
+  { name: 'AAA城投', id: '2c9081e91b55cc84011be3c53b710598', tier: 'extended', aliases: ['城投债收益率曲线(AAA)', '城投AAA', 'LGFV AAA'] },
+  { name: 'AAA银行债', id: '2c9081e9259b766a0125be8b5115149f', tier: 'extended', aliases: ['商业银行普通债收益率曲线(AAA)', '商业银行债收益率曲线(AAA)', '银行债AAA', 'Financial Bond of Commercial Bank AAA'] },
+  { name: '地方债', id: '998183ff8c00f640018c32d4721a0d16', tier: 'short_history', fetch_separately: true, aliases: ['地方政府债收益率曲线', '地方政府债', 'Local Government'] }
+];
 
 function findCurveRequestIndex_(curves, curveName) {
   for (var i = 0; i < curves.length; i++) {
@@ -19,7 +41,6 @@ function findCurveRequestIndex_(curves, curveName) {
   }
   return -1;
 }
-
 
 function fetchChinaBondCurveSeparately_(date, curve) {
   var html = fetchChinaBondCurves_(date, [curve.id]);
@@ -34,10 +55,7 @@ function fetchChinaBondCurveSeparately_(date, curve) {
   return blocks[0];
 }
 
-
 function fetchChinaBondCurves_(workTime, ycDefIds) {
-  var url = 'https://yield.chinabond.com.cn/cbweb-mn/yc/ycDetail';
-
   var cache = CacheService.getScriptCache();
   var cacheKey = buildShortCacheKey_('yc_detail', [workTime].concat(ycDefIds));
   var cached = cache.get(cacheKey);
@@ -55,7 +73,7 @@ function fetchChinaBondCurves_(workTime, ycDefIds) {
     locale: 'zh_CN'
   };
 
-  var resp = UrlFetchApp.fetch(url, {
+  var resp = UrlFetchApp.fetch(CHINABOND_YC_DETAIL_URL, {
     method: 'post',
     payload: payload,
     muteHttpExceptions: true,
@@ -78,8 +96,6 @@ function fetchChinaBondCurves_(workTime, ycDefIds) {
 /**
  * 将页面中的标题表和数据表按顺序解析为 blocks。
  */
-
-
 function parseChinaBondCurveBlocks_(html) {
   var blocks = [];
   var pairRe = /<table[^>]*class="t1"[\s\S]*?<span>\s*([^<]+?)\s*<\/span>[\s\S]*?<\/table>\s*<table[^>]*class="tablelist"[\s\S]*?<\/table>/gi;
@@ -107,8 +123,6 @@ function parseChinaBondCurveBlocks_(html) {
 /**
  * 将页面标题与内部曲线名统一压缩成便于匹配的 key。
  */
-
-
 function buildCurveTitleKey_(text) {
   return String(text || '')
     .replace(/<[^>]+>/g, '')
@@ -149,8 +163,6 @@ function buildCurveTitleKey_(text) {
  * 根据 CURVES 配置的 name / aliases 与解析出的标题做匹配。
  * 先按别名匹配，匹配不到再按请求顺序兜底。
  */
-
-
 function resolveCurveBlock_(curve, blocks, usedBlockIndex, requestIndex) {
   var aliases = [curve.name].concat(curve.aliases || []);
   var aliasKeys = aliases.map(function(alias) {
@@ -185,8 +197,6 @@ function resolveCurveBlock_(curve, blocks, usedBlockIndex, requestIndex) {
 /**
  * 把 tablelist 表格解析为 term -> yield 的 Map。
  */
-
-
 function parseTableListToMap_(tableHtml) {
   var map = new Map();
   var rowRe = /<tr[\s\S]*?<\/tr>/gi;
@@ -214,20 +224,14 @@ function parseTableListToMap_(tableHtml) {
 }
 
 /**
- * 确保 yc_curve 表头存在。
- */
-
-
-/**
  * 获取中债单一指数查询结果 JSON。
  * 供 40_formula_chinabond_index.js 中的自定义公式复用。
  */
 function fetchChinabondIndexSeries_(indexid) {
-  var url = 'https://yield.chinabond.com.cn/cbweb-mn/indices/singleIndexQueryResult'
+  var url = CHINABOND_INDEX_SINGLE_QUERY_URL
     + '?indexid=' + encodeURIComponent(indexid)
-    + '&&qxlxt=00&&ltcslx=00&&zslxt=PJSZFJQ,PJSZFDQSYL,PJSZFTX'
+    + '&&qxlxt=00&<cslx=00&&zslxt=PJSZFJQ,PJSZFDQSYL,PJSZFTX'
     + '&&zslxt1=PJSZFJQ,PJSZFDQSYL,PJSZFTX&&lx=1&&locale=';
-
   return safeFetchJson_(url, {
     method: 'post',
     headers: {
@@ -244,7 +248,6 @@ function getLatestPoint_(series) {
   if (!series || typeof series !== 'object') return null;
   var keys = Object.keys(series);
   if (!keys.length) return null;
-
   var latestTs = Math.max.apply(null, keys.map(Number));
   return {
     ts: latestTs,

@@ -3,10 +3,18 @@
  * 央行 / PBC 来源适配层。
  *
  * 负责：
+ * - 集中维护央行公告来源 URL
  * - 公告列表页抓取
  * - OMO / MLF / LPR 明细解析
  * - 文本、HTML、链接归一化
  ********************/
+
+var POLICY_RATE_SOURCE_CONFIG = {
+  omo_list_url: 'https://www.pbc.gov.cn/zhengcehuobisi/125207/125213/125431/125475/index.html',
+  mlf_list_url: 'https://www.pbc.gov.cn/zhengcehuobisi/125207/125213/125437/125446/125873/index.html',
+  lpr_list_url: 'https://www.pbc.gov.cn/zhengcehuobisi/125207/125213/125440/3876551/index.html',
+  mortgage_rate_list_url: 'https://camlmac.pbc.gov.cn/zhengcehuobisi/125207/125213/125440/125838/5470606/index.html'
+};
 
 
 function prFetchLatestPolicyRateEvents_() {
