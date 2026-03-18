@@ -230,7 +230,7 @@ function parseTableListToMap_(tableHtml) {
 function fetchChinabondIndexSeries_(indexid) {
   var url = CHINABOND_INDEX_SINGLE_QUERY_URL
     + '?indexid=' + encodeURIComponent(indexid)
-    + '&&qxlxt=00&<cslx=00&&zslxt=PJSZFJQ,PJSZFDQSYL,PJSZFTX'
+    + '&&qxlxt=00&&ltcslx=00&&zslxt=PJSZFJQ,PJSZFDQSYL,PJSZFTX'
     + '&&zslxt1=PJSZFJQ,PJSZFDQSYL,PJSZFTX&&lx=1&&locale=';
   return safeFetchJson_(url, {
     method: 'post',

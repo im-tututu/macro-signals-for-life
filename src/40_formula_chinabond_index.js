@@ -73,14 +73,6 @@ function getMidnightUnixTimestamp() {
 
 function GetChinabondIndexDuration(id) {
   var indexid = id || '8a8b2ca0332abed20134ea76d8885831';
-  var url = 'https://yield.chinabond.com.cn/cbweb-mn/indices/singleIndexQueryResult?indexid=' + indexid + '&&qxlxt=00&&ltcslx=00&&zslxt=PJSZFJQ,PJSZFDQSYL,PJSZFTX&&zslxt1=PJSZFJQ,PJSZFDQSYL,PJSZFTX&&lx=1&&locale=';
-  var options = {
-    method: 'post',
-    headers: {
-      accept: 'application/json, text/javascript, */*; q=0.01',
-      'x-requested-with': 'XMLHttpRequest'
-    }
-  };
 
   try {
     var json = fetchChinabondIndexSeries_(indexid);
