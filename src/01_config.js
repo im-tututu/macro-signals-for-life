@@ -33,14 +33,8 @@ var TERMS = [
   15, 20, 30, 40, 50
 ];
 
-/** 家庭配置基线。 */
-var HOUSEHOLD_BUCKET_BASELINE = {
-  cash: 15,
-  stable_fixed_income: 35,
-  active_fixed_income: 20,
-  hedge: 10,
-  risk: 20
-};
+/** 信号表默认只重建最近一周；需要时可显式走全量。 */
+var DEFAULT_SIGNAL_REBUILD_DAYS = 7;
 
 /** 信号复盘默认观察窗口。 */
 var SIGNAL_REVIEW_HORIZONS = [20, 60, 120];

@@ -16,25 +16,63 @@ function test() {
 }
 
 /**
+ * 统一输出作业步骤日志。
+ */
+function runJobStepWithLog_(stepName, fn) {
+  var startedAt = new Date();
+  Logger.log('▶️ ' + stepName + ' | start');
+  try {
+    var result = fn();
+    var elapsedMs = new Date().getTime() - startedAt.getTime();
+    Logger.log(
+      '✅ ' + stepName +
+      ' | done' +
+      ' | elapsed_ms=' + elapsedMs +
+      ' | ' + buildJobStatsText_(extractStatsFromResult_(result))
+    );
+    return result;
+  } catch (err) {
+    var elapsed = new Date().getTime() - startedAt.getTime();
+    Logger.log('❌ ' + stepName + ' | failed | elapsed_ms=' + elapsed + ' | err=' + err);
+    throw err;
+  }
+}
+
+/**
  * 一次性执行完整日更流程：
  * 1) 中债曲线
  * 2) 资金面
  * 3) 国债期货
  * 4) 政策利率
  * 5) 海外宏观 / 民生资产
- * 6) 指标、信号、复盘重建
+ * 6) 指标重建
+ * 7) 信号重建（默认最近一周）
  */
 function runEnhancedSystem() {
   var today = formatDate_(new Date());
+  Logger.log('runEnhancedSystem | date=' + today + ' | signal_mode=recent_' + DEFAULT_SIGNAL_REBUILD_DAYS + 'd');
 
-  runDailyWide_(today);
-  fetchPledgedRepoRates_();
-  fetchBondFutures_();
-  syncRawPolicyRateLatest();
-  fetchOverseasMacro_();
-  fetchLifeAsset_();
-
-  rebuildAll_();
+  var r1 = runJobStepWithLog_('中债曲线', function() {
+    return runDailyWide_(today);
+  });
+  var r2 = runJobStepWithLog_('资金面', function() {
+    return fetchPledgedRepoRates_();
+  });
+  var r3 = runJobStepWithLog_('国债期货', function() {
+    return fetchBondFutures_();
+  });
+  var r4 = runJobStepWithLog_('政策利率', function() {
+    return syncRawPolicyRateLatest();
+  });
+  var r5 = runJobStepWithLog_('海外宏观', function() {
+    return fetchOverseasMacro_();
+  });
+  var r6 = runJobStepWithLog_('民生与资产价格', function() {
+    return fetchLifeAsset_();
+  });
+  var r7 = runJobStepWithLog_('派生层重建', function() {
+    return rebuildAll_();
+  });
 
   return {
     message: 'daily close done',
@@ -45,7 +83,7 @@ function runEnhancedSystem() {
       policy_rate: r4 || null,
       overseas_macro: r5 || null,
       life_asset: r6 || null,
-      rebuild: 'done'
+      rebuild: r7 || null
     },
     stats: mergeJobStats_([
       extractStatsFromResult_(r1),
@@ -54,27 +92,99 @@ function runEnhancedSystem() {
       extractStatsFromResult_(r4),
       extractStatsFromResult_(r5),
       extractStatsFromResult_(r6),
-      { updated_rows: 3 } // metrics / signal / review 三张派生表，可按你需要改
+      extractStatsFromResult_(r7)
     ])
-  };  
+  };
 }
 
 /**
  * 仅重建派生层，不抓取原始数据。
+ *
+ * 默认：
+ * - 指标全量重建
+ * - 信号仅重建最近一周
  */
 function rebuildAll_() {
-  buildMetrics_();
-  buildSignal_();
+  Logger.log('rebuildAll_ | signal_mode=recent_' + DEFAULT_SIGNAL_REBUILD_DAYS + 'd');
+  var r1 = runJobStepWithLog_('重建指标', function() {
+    buildMetrics_();
+    return {
+      message: 'metrics rebuild done',
+      stats: { updated_rows: 1 }
+    };
+  });
+  var r2 = runJobStepWithLog_('重建信号(最近一周)', function() {
+    return buildSignalRecentDays_(DEFAULT_SIGNAL_REBUILD_DAYS);
+  });
   SpreadsheetApp.flush();
   Utilities.sleep(500);
-  //buildSignalReview_();
+  return {
+    message: 'derived rebuild done',
+    detail: {
+      metrics: r1 || null,
+      signal: r2 || null,
+      signal_mode: 'recent',
+      signal_days: DEFAULT_SIGNAL_REBUILD_DAYS
+    },
+    stats: mergeJobStats_([
+      extractStatsFromResult_(r1),
+      extractStatsFromResult_(r2)
+    ])
+  };
+}
+
+/**
+ * 全量重建派生层。
+ *
+ * 用法：
+ * - 改了信号口径，且需要把历史整段重刷时执行
+ */
+function rebuildAllFull_() {
+  Logger.log('rebuildAllFull_ | signal_mode=all');
+  var r1 = runJobStepWithLog_('重建指标', function() {
+    buildMetrics_();
+    return {
+      message: 'metrics rebuild done',
+      stats: { updated_rows: 1 }
+    };
+  });
+  var r2 = runJobStepWithLog_('重建信号(全量)', function() {
+    return buildSignalAll_();
+  });
+  SpreadsheetApp.flush();
+  Utilities.sleep(500);
+  return {
+    message: 'derived full rebuild done',
+    detail: {
+      metrics: r1 || null,
+      signal: r2 || null,
+      signal_mode: 'all'
+    },
+    stats: mergeJobStats_([
+      extractStatsFromResult_(r1),
+      extractStatsFromResult_(r2)
+    ])
+  };
 }
 
 function rebuildSignalAndReview_() {
-  buildSignal_();
+  Logger.log('rebuildSignalAndReview_ | signal_mode=recent_' + DEFAULT_SIGNAL_REBUILD_DAYS + 'd');
+  var result = runJobStepWithLog_('重建信号(最近一周)', function() {
+    return buildSignalRecentDays_(DEFAULT_SIGNAL_REBUILD_DAYS);
+  });
   SpreadsheetApp.flush();
   Utilities.sleep(500);
-  //buildSignalReview_();
+  return result;
+}
+
+function rebuildSignalAndReviewFull_() {
+  Logger.log('rebuildSignalAndReviewFull_ | signal_mode=all');
+  var result = runJobStepWithLog_('重建信号(全量)', function() {
+    return buildSignalAll_();
+  });
+  SpreadsheetApp.flush();
+  Utilities.sleep(500);
+  return result;
 }
 
 /**

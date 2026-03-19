@@ -22,7 +22,8 @@
  * 3) 国债期货
  * 4) 政策利率
  * 5) 民生 / 资产价格
- * 6) 指标、信号、复盘重建
+ * 6) 指标重建
+ * 7) 信号重建（默认最近一周）
  *
  * 影响范围：
  * - 写入/更新：原始_收益率曲线、原始_资金面、原始_国债期货、原始_政策利率、原始_民生与资产价格
@@ -33,14 +34,26 @@ function jobNightlyCn() {
     'jobNightlyCn',
     function () {
       var today = today_();
+      Logger.log('jobNightlyCn | date=' + today + ' | signal_mode=recent_' + DEFAULT_SIGNAL_REBUILD_DAYS + 'd');
 
-      var r1 = runDailyWide_(today);
-      var r2 = fetchPledgedRepoRates_();
-      var r3 = fetchBondFutures_();
-      var r4 = syncRawPolicyRateLatest();
-      var r5 = fetchLifeAsset_ ? fetchLifeAsset_() : null;
-
-      rebuildAll_();
+      var r1 = runJobStepWithLog_('中债曲线', function () {
+        return runDailyWide_(today);
+      });
+      var r2 = runJobStepWithLog_('资金面', function () {
+        return fetchPledgedRepoRates_();
+      });
+      var r3 = runJobStepWithLog_('国债期货', function () {
+        return fetchBondFutures_();
+      });
+      var r4 = runJobStepWithLog_('政策利率', function () {
+        return syncRawPolicyRateLatest();
+      });
+      var r5 = runJobStepWithLog_('民生与资产价格', function () {
+        return fetchLifeAsset_ ? fetchLifeAsset_() : null;
+      });
+      var r6 = runJobStepWithLog_('派生层重建', function () {
+        return rebuildAll_();
+      });
 
       return {
         message: 'nightly cn done',
@@ -50,7 +63,7 @@ function jobNightlyCn() {
           futures: r3 || null,
           policy_rate: r4 || null,
           life_asset: r5 || null,
-          rebuild: 'done'
+          rebuild: r6 || null
         },
         stats: mergeJobStats_([
           extractStatsFromResult_(r1),
@@ -58,7 +71,7 @@ function jobNightlyCn() {
           extractStatsFromResult_(r3),
           extractStatsFromResult_(r4),
           extractStatsFromResult_(r5),
-          { updated_rows: 3 }
+          extractStatsFromResult_(r6)
         ])
       };
     },
@@ -78,7 +91,8 @@ function jobNightlyCn() {
  *
  * 流程：
  * 1) 海外宏观
- * 2) 指标、信号、复盘重建
+ * 2) 指标重建
+ * 3) 信号重建（默认最近一周）
  *
  * 影响范围：
  * - 写入/更新：原始_海外宏观
@@ -88,19 +102,24 @@ function jobMorningUs() {
   return runJobWithNotify_(
     'jobMorningUs',
     function () {
-      var r1 = fetchOverseasMacro_();
+      Logger.log('jobMorningUs | signal_mode=recent_' + DEFAULT_SIGNAL_REBUILD_DAYS + 'd');
 
-      rebuildAll_();
+      var r1 = runJobStepWithLog_('海外宏观', function () {
+        return fetchOverseasMacro_();
+      });
+      var r2 = runJobStepWithLog_('派生层重建', function () {
+        return rebuildAll_();
+      });
 
       return {
         message: 'morning us done',
         detail: {
           overseas_macro: r1 || null,
-          rebuild: 'done'
+          rebuild: r2 || null
         },
         stats: mergeJobStats_([
           extractStatsFromResult_(r1),
-          { updated_rows: 3 }
+          extractStatsFromResult_(r2)
         ])
       };
     },
@@ -118,9 +137,20 @@ function jobMorningUs() {
  * - 你改了 metrics / signal 规则后直接执行
  * - 原始表已齐全时，用它最快
  *
- * 影响范围：
- * - 重建：指标、信号、信号-复盘
+ * 默认：
+ * - 指标全量
+ * - 信号最近一周
  */
 function jobManualRebuild() {
-  rebuildAll_();
+  return rebuildAll_();
+}
+
+/**
+ * 全量重建派生层。
+ *
+ * 用法：
+ * - 改了信号规则并需要把历史整段重刷时执行
+ */
+function jobManualRebuildFull() {
+  return rebuildAllFull_();
 }

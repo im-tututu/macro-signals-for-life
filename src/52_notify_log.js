@@ -325,11 +325,11 @@ function buildSignalReview_() {
     'rates_strategy_tilt',
     'rates_rv_ranking',
     'credit_strategy_tilt',
+    'view_mortgage_background',
+    'view_housing_background',
     'view_fx_background',
     'view_gold_background',
-    'view_commodity_background',
-    'view_household_allocation',
-    'comment_household'
+    'view_commodity_background'
   ];
 
   if (!mainSheet || mainSheet.getLastRow() <= 1) {
@@ -350,11 +350,11 @@ function buildSignalReview_() {
       row[requireColumn_(srcHeader, 'rates_strategy_tilt')],
       row[requireColumn_(srcHeader, 'rates_rv_ranking')],
       row[requireColumn_(srcHeader, 'credit_strategy_tilt')],
+      row[requireColumn_(srcHeader, 'view_mortgage_background')],
+      row[requireColumn_(srcHeader, 'view_housing_background')],
       row[requireColumn_(srcHeader, 'view_fx_background')],
       row[requireColumn_(srcHeader, 'view_gold_background')],
-      row[requireColumn_(srcHeader, 'view_commodity_background')],
-      row[requireColumn_(srcHeader, 'view_household_allocation')],
-      row[requireColumn_(srcHeader, 'comment_household')]
+      row[requireColumn_(srcHeader, 'view_commodity_background')]
     ]);
   }
 

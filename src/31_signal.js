@@ -19,7 +19,9 @@ var SIGNAL_THEME_ASSET_ALLOC = '资产配置';
 var SIGNAL_THEME_LIFE_INVEST = '生活投资';
 
 
-function buildSignal_() {
+function buildSignal_(options) {
+  options = normalizeSignalBuildOptions_(options);
+
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var metricsSheet = mustGetSheet_(ss, SHEET_METRICS);
   var mainSheet = getOrCreateSheetByName_(ss, SHEET_SIGNAL_MAIN || '信号-主要');
@@ -33,6 +35,28 @@ function buildSignal_() {
   metricRows = sortAndDedupeByDate_(metricRows, function(row) {
     return row.dateKey;
   });
+
+  var cutoffDate = null;
+  if (!options.rebuildAll) {
+    var forceFullReason = detectLegacySignalSchema_(mainSheet, detailSheet);
+    if (forceFullReason) {
+      Logger.log('buildSignal_ auto switch to full rebuild | reason=' + forceFullReason);
+      options.rebuildAll = true;
+    } else {
+      cutoffDate = computeSignalCutoffDate_(metricRows, options.days);
+      metricRows = metricRows.filter(function(row) {
+        return row.dateObj >= cutoffDate;
+      });
+    }
+  }
+
+  Logger.log(
+    'buildSignal_ start' +
+    ' | mode=' + (options.rebuildAll ? 'all' : 'recent') +
+    ' | days=' + options.days +
+    ' | metric_rows=' + metricRows.length +
+    ' | cutoff=' + (cutoffDate ? formatDateKey_(cutoffDate) : '-')
+  );
 
   var moneyMarketSheet = ss.getSheetByName(SHEET_MONEY_MARKET_RAW);
   var dr007Map = moneyMarketSheet ? readMoneyMarketDr007Map_(moneyMarketSheet) : {};
@@ -72,46 +96,6 @@ function buildSignal_() {
       creditShortEnd
     );
 
-    var householdBuckets = buildHouseholdBuckets_(
-      liquidity,
-      ratesStrategy,
-      creditStrategy,
-      mortgageBackground,
-      housingBackground,
-      fxBackground,
-      usdAllocationBackground,
-      goldBackground,
-      commodityBackground,
-      alloc
-    );
-
-    var householdAllocation = classifyHouseholdAllocationSignal_(
-      ratesStrategy,
-      creditStrategy,
-      mortgageBackground,
-      housingBackground,
-      fxBackground,
-      usdAllocationBackground,
-      goldBackground,
-      commodityBackground,
-      householdBuckets
-    );
-
-    var householdComment = buildHouseholdComment_(
-      liquidity,
-      ratesStrategy,
-      creditStrategy,
-      mortgageBackground,
-      housingBackground,
-      fxBackground,
-      usdAllocationBackground,
-      goldBackground,
-      commodityBackground,
-      alloc,
-      householdAllocation,
-      householdBuckets
-    );
-
     mainRowsAsc.push([
       row.dateObj,
       liquidity.label,
@@ -124,18 +108,6 @@ function buildSignal_() {
       usdAllocationBackground.label,
       goldBackground.label,
       commodityBackground.label,
-      householdAllocation.label,
-      householdBuckets.bucket_cash.signal.label,
-      householdBuckets.bucket_stable_fixed_income.signal.label,
-      householdBuckets.bucket_active_fixed_income.signal.label,
-      householdBuckets.bucket_hedge.signal.label,
-      householdBuckets.bucket_risk.signal.label,
-      householdBuckets.bucket_cash.target_pct,
-      householdBuckets.bucket_stable_fixed_income.target_pct,
-      householdBuckets.bucket_active_fixed_income.target_pct,
-      householdBuckets.bucket_hedge.target_pct,
-      householdBuckets.bucket_risk.target_pct,
-      householdComment,
       alloc.alloc_rates_long,
       alloc.alloc_rates_mid,
       alloc.alloc_rates_short,
@@ -166,24 +138,150 @@ function buildSignal_() {
       makeSignalDetail_(fxBackground, 'view_fx_background', 'fx', '汇率背景', 'cn_us_10y_spread|cn_us_2y_spread|usd_cny|usd_cny_ma20|usd_cny_pct250', 'daily', 230),
       makeSignalDetail_(usdAllocationBackground, 'view_usd_allocation_background', 'fx', '美元配置背景', 'cn_us_10y_spread|cn_us_2y_spread|usd_broad|usd_broad_ma20|usd_cny_pct250', 'weekly', 240),
       makeSignalDetail_(goldBackground, 'view_gold_background', 'hedge', '黄金背景', 'gold|gold_ma20|usd_cny_pct250|cn_us_10y_spread|cn_us_2y_spread|vix', 'weekly', 250),
-      makeSignalDetail_(commodityBackground, 'view_commodity_background', 'macro', '顺周期商品背景', 'wti|brent|copper|vix|spx|nasdaq_100', 'weekly', 260),
-      makeSignalDetail_(householdAllocation, 'view_household_allocation', 'household', '家庭资产桶建议', 'rates_strategy_tilt|credit_strategy_tilt|view_fx_background|view_gold_background|view_commodity_background', 'weekly', 270),
-      makeSignalDetail_(householdBuckets.bucket_cash.signal, 'bucket_cash_tilt', 'household', '活钱桶倾向', 'liquidity_regime|view_fx_background|view_household_allocation', 'weekly', 271),
-      makeSignalDetail_(householdBuckets.bucket_stable_fixed_income.signal, 'bucket_stable_fixed_income_tilt', 'household', '稳健固收桶倾向', 'rates_strategy_tilt|credit_strategy_tilt|view_household_allocation', 'weekly', 272),
-      makeSignalDetail_(householdBuckets.bucket_active_fixed_income.signal, 'bucket_active_fixed_income_tilt', 'household', '进取固收桶倾向', 'rates_strategy_tilt|credit_strategy_tilt|view_household_allocation', 'weekly', 273),
-      makeSignalDetail_(householdBuckets.bucket_hedge.signal, 'bucket_hedge_tilt', 'household', '对冲保值桶倾向', 'view_fx_background|view_usd_allocation_background|view_gold_background', 'weekly', 274),
-      makeSignalDetail_(householdBuckets.bucket_risk.signal, 'bucket_risk_tilt', 'household', '风险资产桶倾向', 'view_housing_background|view_commodity_background|view_fx_background', 'weekly', 275),
-      makeSignalDetail_(makeSignalResult_(householdComment, 'note', 0, 'neutral', 'low', householdComment), 'comment_household', 'household', '家庭配置说明', 'multiple', 'weekly', 280)
+      makeSignalDetail_(commodityBackground, 'view_commodity_background', 'macro', '顺周期商品背景', 'wti|brent|copper|vix|spx|nasdaq_100', 'weekly', 260)
     ]);
   }
 
   var mainRowsDesc = mainRowsAsc.slice().reverse();
   var detailRowsDesc = sortDetailRowsDesc_(detailRows);
 
+  if (!options.rebuildAll && cutoffDate) {
+    mainRowsDesc = mergeSignalSheetRowsByCutoff_(mainSheet, mainRowsDesc, cutoffDate);
+    detailRowsDesc = mergeSignalSheetRowsByCutoff_(detailSheet, detailRowsDesc, cutoffDate);
+  }
+
   writeSignalMainSheet_(mainSheet, mainRowsDesc);
   writeSignalDetailSheet_(detailSheet, detailRowsDesc);
+
+  var lastDate = metricRows.length ? metricRows[metricRows.length - 1].dateKey : '';
+  return {
+    message: 'signal rebuild done',
+    detail: {
+      mode: options.rebuildAll ? 'all' : 'recent',
+      days: options.days,
+      cutoff: cutoffDate ? formatDateKey_(cutoffDate) : '',
+      rebuilt_signal_dates: metricRows.length,
+      final_main_rows: Math.max(mainRowsDesc.length, 0),
+      final_detail_rows: Math.max(detailRowsDesc.length, 0)
+    },
+    stats: {
+      inserted_rows: 0,
+      updated_rows: metricRows.length,
+      skipped_rows: 0,
+      failed_rows: 0,
+      changed_points: mainRowsDesc.length + detailRowsDesc.length,
+      source_date: lastDate
+    }
+  };
 }
 
+function buildSignalRecentDays_(days) {
+  return buildSignal_({ days: days });
+}
+
+function buildSignalAll_() {
+  return buildSignal_({ rebuildAll: true });
+}
+
+function normalizeSignalBuildOptions_(options) {
+  options = options || {};
+  var days = Number(options.days || DEFAULT_SIGNAL_REBUILD_DAYS || 7);
+  if (!isFinite(days) || days <= 0) days = DEFAULT_SIGNAL_REBUILD_DAYS || 7;
+  return {
+    rebuildAll: options.rebuildAll === true || options.mode === 'all',
+    days: Math.max(1, Math.floor(days))
+  };
+}
+
+function computeSignalCutoffDate_(metricRows, days) {
+  if (!metricRows || !metricRows.length) return null;
+  var last = metricRows[metricRows.length - 1].dateObj;
+  var cutoff = new Date(last.getFullYear(), last.getMonth(), last.getDate());
+  cutoff.setDate(cutoff.getDate() - Math.max(0, Number(days || 1) - 1));
+  return cutoff;
+}
+
+function detectLegacySignalSchema_(mainSheet, detailSheet) {
+  var legacyMainColumns = [
+    'view_household_allocation',
+    'bucket_cash_tilt',
+    'bucket_stable_fixed_income_tilt',
+    'bucket_active_fixed_income_tilt',
+    'bucket_hedge_tilt',
+    'bucket_risk_tilt',
+    'bucket_cash',
+    'bucket_stable_fixed_income',
+    'bucket_active_fixed_income',
+    'bucket_hedge',
+    'bucket_risk',
+    'comment_household'
+  ];
+  var legacyDetailCodes = {
+    view_household_allocation: true,
+    bucket_cash_tilt: true,
+    bucket_stable_fixed_income_tilt: true,
+    bucket_active_fixed_income_tilt: true,
+    bucket_hedge_tilt: true,
+    bucket_risk_tilt: true,
+    comment_household: true
+  };
+
+  if (mainSheet && mainSheet.getLastRow() >= 1 && mainSheet.getLastColumn() >= 1) {
+    var mainHeader = mainSheet.getRange(1, 1, 1, mainSheet.getLastColumn()).getValues()[0];
+    for (var i = 0; i < legacyMainColumns.length; i++) {
+      if (mainHeader.indexOf(legacyMainColumns[i]) >= 0) return 'legacy_main_header';
+    }
+  }
+
+  if (detailSheet && detailSheet.getLastRow() >= 2 && detailSheet.getLastColumn() >= 4) {
+    var detailHeader = detailSheet.getRange(1, 1, 1, detailSheet.getLastColumn()).getValues()[0];
+    var detailIdx = buildHeaderIndex_(detailHeader);
+    if (detailIdx.signal_code == null) return 'detail_header_missing_signal_code';
+    var codeCol = detailIdx.signal_code + 1;
+    var codes = detailSheet.getRange(2, codeCol, detailSheet.getLastRow() - 1, 1).getValues();
+    for (var j = 0; j < codes.length; j++) {
+      var code = String(codes[j][0] || '');
+      if (legacyDetailCodes[code]) return 'legacy_detail_rows';
+    }
+  }
+
+  return '';
+}
+
+function mergeSignalSheetRowsByCutoff_(sheet, rebuiltRowsDesc, cutoffDate) {
+  var keptRows = readSignalSheetRowsBeforeCutoff_(sheet, cutoffDate);
+  var merged = keptRows.concat(rebuiltRowsDesc || []);
+  merged.sort(compareSignalRowsDesc_);
+  return merged;
+}
+
+function readSignalSheetRowsBeforeCutoff_(sheet, cutoffDate) {
+  if (!sheet || !cutoffDate) return [];
+  var lastRow = sheet.getLastRow();
+  var lastCol = sheet.getLastColumn();
+  if (lastRow <= 1 || lastCol <= 0) return [];
+
+  var values = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
+  var kept = [];
+  for (var i = 0; i < values.length; i++) {
+    var row = values[i];
+    var dateObj = normalizeLooseDate_(row[0]);
+    if (!dateObj) continue;
+    if (dateObj < cutoffDate) kept.push(row);
+  }
+  return kept;
+}
+
+function compareSignalRowsDesc_(a, b) {
+  var da = normalizeLooseDate_(a && a[0]);
+  var db = normalizeLooseDate_(b && b[0]);
+  var ta = da ? da.getTime() : -Infinity;
+  var tb = db ? db.getTime() : -Infinity;
+  if (tb !== ta) return tb - ta;
+  var sa = a && a.length ? Number(a[a.length - 1] || 0) : 0;
+  var sb = b && b.length ? Number(b[b.length - 1] || 0) : 0;
+  return sa - sb;
+}
 
 function buildETFSignal_() { buildSignal_(); }
 function runBondAllocationSignal_() { buildSignal_(); }
@@ -203,18 +301,6 @@ function writeSignalMainSheet_(sheet, rows) {
     'view_usd_allocation_background',
     'view_gold_background',
     'view_commodity_background',
-    'view_household_allocation',
-    'bucket_cash_tilt',
-    'bucket_stable_fixed_income_tilt',
-    'bucket_active_fixed_income_tilt',
-    'bucket_hedge_tilt',
-    'bucket_risk_tilt',
-    'bucket_cash',
-    'bucket_stable_fixed_income',
-    'bucket_active_fixed_income',
-    'bucket_hedge',
-    'bucket_risk',
-    'comment_household',
     'alloc_rates_long',
     'alloc_rates_mid',
     'alloc_rates_short',
@@ -230,13 +316,11 @@ function writeSignalMainSheet_(sheet, rows) {
   if (rows.length > 0) {
     sheet.getRange(2, 1, rows.length, rows[0].length).setValues(rows);
     sheet.getRange(2, 1, rows.length, 1).setNumberFormat('yyyy-mm-dd');
-    sheet.getRange(2, 18, rows.length, 5).setNumberFormat('0');
-    sheet.getRange(2, 24, rows.length, 6).setNumberFormat('0');
+    sheet.getRange(2, 12, rows.length, 6).setNumberFormat('0');
   }
 
   formatSignalSheet_(sheet);
 }
-
 
 
 function writeSignalDetailSheet_(sheet, rows) {
