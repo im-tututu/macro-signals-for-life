@@ -12,7 +12,7 @@
  * 手工测试入口。
  */
 function test() {
-  fetchBondFutures_();
+  buildMetricDictionary_();
 }
 
 /**

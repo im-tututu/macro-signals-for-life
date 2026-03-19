@@ -27,6 +27,8 @@ function buildSignal_(options) {
   var mainSheet = getOrCreateSheetByName_(ss, SHEET_SIGNAL_MAIN || '信号-主要');
   var detailSheet = getOrCreateSheetByName_(ss, SHEET_SIGNAL_DETAIL || '信号-明细');
 
+  ensureSignalMetricSchema_(metricsSheet);
+
   var metricRows = readMetricsRowsV2_(metricsSheet);
   if (!metricRows.length) {
     throw new Error(SHEET_METRICS + ' 无有效数据。');
@@ -66,7 +68,7 @@ function buildSignal_(options) {
 
   for (var i = 0; i < metricRows.length; i++) {
     var row = metricRows[i];
-    var dr007 = toNumberOrNull_(dr007Map[row.dateKey]);
+    var dr007 = isFiniteNumber_(row.dr007_weighted_rate) ? row.dr007_weighted_rate : toNumberOrNull_(dr007Map[row.dateKey]);
 
     var liquidity = classifyLiquidityRegime_(dr007);
     var ratesDuration = classifyDurationSignal_(row);
@@ -118,26 +120,26 @@ function buildSignal_(options) {
 
     pushSignalDetailRows_(detailRows, row.dateObj, SIGNAL_THEME_ASSET_ALLOC, [
       makeSignalDetail_(liquidity, 'liquidity_regime', 'liquidity', '资金与流动性环境', 'dr007_weighted_rate', 'daily', 10),
-      makeSignalDetail_(ratesStrategy, 'rates_strategy_tilt', 'rates', '利率债久期/超长端策略', 'gov_10y_pct250|gov_slope_10_1|gov_slope_30_10', 'weekly', 15),
-      makeSignalDetail_(ratesDuration, 'rates_duration_tilt', 'rates', '利率债久期倾向', 'gov_10y_pct250|gov_slope_10_1', 'weekly', 20),
-      makeSignalDetail_(ratesUltraLong, 'rates_ultra_long_tilt', 'rates', '利率债超长端倾向', 'gov_slope_30_10', 'weekly', 30),
-      makeSignalDetail_(ratesCurve, 'rates_curve_shape', 'rates', '利率债曲线形态', 'gov_slope_10_1', 'weekly', 40),
-      makeSignalDetail_(ratesPolicyBank, 'rates_rv_policy_bank_vs_gov', 'rates', '利率债相对价值：国开债 vs 国债', 'spread_cdb_gov_10y|spread_cdb_gov_10y_pct250', 'weekly', 50),
-      makeSignalDetail_(ratesLocalGov, 'rates_rv_local_gov_vs_gov', 'rates', '利率债相对价值：地方债 vs 国债', 'spread_local_gov_gov_10y', 'weekly', 60),
-      makeSignalDetail_(ratesRvRanking, 'rates_rv_ranking', 'rates', '利率债相对价值排序', 'spread_cdb_gov_10y_pct250|spread_local_gov_gov_10y', 'weekly', 70),
-      makeSignalDetail_(creditStrategy, 'credit_strategy_tilt', 'credit', '信用债资质/下沉策略', 'spread_aaa_credit_gov_5y_pct250|spread_aa_plus_vs_aaa_credit_1y_pct250', 'weekly', 80),
-      makeSignalDetail_(creditQuality, 'credit_quality_tilt', 'credit', '信用债资质倾向', 'spread_aaa_credit_gov_5y|spread_aaa_credit_gov_5y_pct250', 'weekly', 90),
-      makeSignalDetail_(creditSink, 'credit_sink_tilt', 'credit', '信用债下沉倾向', 'spread_aa_plus_vs_aaa_credit_1y|spread_aa_plus_vs_aaa_credit_1y_pct250', 'weekly', 100),
-      makeSignalDetail_(creditMtnTier, 'credit_rv_mtn_tier', 'credit', '信用债相对价值：AAA中票 vs AAA+中票', 'spread_aaa_mtn_vs_aaa_plus_mtn_1y', 'weekly', 110),
-      makeSignalDetail_(creditShortEnd, 'credit_rv_short_end_vs_ncd', 'credit', '短端票息资产：高等级信用 vs 存单', 'spread_aaa_credit_ncd_1y|aaa_ncd_1y_pct250|dr007_weighted_rate', 'weekly', 120)
+      makeSignalDetail_(ratesStrategy, 'rates_strategy_tilt', 'rates', '利率债久期/超长端策略', 'gov_10y_prank250|slope_gov_10y_1y_bp|slope_gov_30y_10y_bp', 'weekly', 15),
+      makeSignalDetail_(ratesDuration, 'rates_duration_tilt', 'rates', '利率债久期倾向', 'gov_10y_prank250|slope_gov_10y_1y_bp', 'weekly', 20),
+      makeSignalDetail_(ratesUltraLong, 'rates_ultra_long_tilt', 'rates', '利率债超长端倾向', 'slope_gov_30y_10y_bp', 'weekly', 30),
+      makeSignalDetail_(ratesCurve, 'rates_curve_shape', 'rates', '利率债曲线形态', 'slope_gov_10y_1y_bp', 'weekly', 40),
+      makeSignalDetail_(ratesPolicyBank, 'rates_rv_policy_bank_vs_gov', 'rates', '利率债相对价值：国开债 vs 国债', 'spread_cdb_gov_10y_bp|spread_cdb_gov_10y_bp_prank250', 'weekly', 50),
+      makeSignalDetail_(ratesLocalGov, 'rates_rv_local_gov_vs_gov', 'rates', '利率债相对价值：地方债 vs 国债', 'spread_local_gov_gov_10y_bp', 'weekly', 60),
+      makeSignalDetail_(ratesRvRanking, 'rates_rv_ranking', 'rates', '利率债相对价值排序', 'spread_cdb_gov_10y_bp_prank250|spread_local_gov_gov_10y_bp', 'weekly', 70),
+      makeSignalDetail_(creditStrategy, 'credit_strategy_tilt', 'credit', '信用债资质/下沉策略', 'spread_aaa_credit_gov_5y_bp_prank250|spread_aa_plus_credit_aaa_credit_1y_bp_prank250', 'weekly', 80),
+      makeSignalDetail_(creditQuality, 'credit_quality_tilt', 'credit', '信用债资质倾向', 'spread_aaa_credit_gov_5y_bp|spread_aaa_credit_gov_5y_bp_prank250', 'weekly', 90),
+      makeSignalDetail_(creditSink, 'credit_sink_tilt', 'credit', '信用债下沉倾向', 'spread_aa_plus_credit_aaa_credit_1y_bp|spread_aa_plus_credit_aaa_credit_1y_bp_prank250', 'weekly', 100),
+      makeSignalDetail_(creditMtnTier, 'credit_rv_mtn_tier', 'credit', '信用债相对价值：AAA中票 vs AAA+中票', 'spread_aaa_mtn_aaa_plus_mtn_1y_bp', 'weekly', 110),
+      makeSignalDetail_(creditShortEnd, 'credit_rv_short_end_vs_ncd', 'credit', '短端票息资产：高等级信用 vs 存单', 'spread_aaa_credit_ncd_1y_bp|aaa_ncd_1y_prank250|dr007_weighted_rate', 'weekly', 120)
     ]);
 
     pushSignalDetailRows_(detailRows, row.dateObj, SIGNAL_THEME_LIFE_INVEST, [
-      makeSignalDetail_(mortgageBackground, 'view_mortgage_background', 'housing', '房贷背景', 'spread_lpr_5y_gov_5y|spread_lpr_5y_ncd_1y|spread_lpr_1y_mlf_1y|spread_ncd_mlf_1y|spread_dr007_omo_7d', 'weekly', 210),
-      makeSignalDetail_(housingBackground, 'view_housing_background', 'housing', '住房背景', 'spread_local_gov_gov_5y|spread_local_gov_gov_10y|spread_lgfv_vs_high_grade_credit_1y|spread_bank_bond_vs_high_grade_credit_1y|spread_bank_bond_vs_high_grade_credit_3y|spread_bank_bond_vs_high_grade_credit_5y|spread_ncd_mlf_1y|spread_lpr5y_gov5y', 'weekly', 220),
-      makeSignalDetail_(fxBackground, 'view_fx_background', 'fx', '汇率背景', 'cn_us_10y_spread|cn_us_2y_spread|usd_cny|usd_cny_ma20|usd_cny_pct250', 'daily', 230),
-      makeSignalDetail_(usdAllocationBackground, 'view_usd_allocation_background', 'fx', '美元配置背景', 'cn_us_10y_spread|cn_us_2y_spread|usd_broad|usd_broad_ma20|usd_cny_pct250', 'weekly', 240),
-      makeSignalDetail_(goldBackground, 'view_gold_background', 'hedge', '黄金背景', 'gold|gold_ma20|usd_cny_pct250|cn_us_10y_spread|cn_us_2y_spread|vix', 'weekly', 250),
+      makeSignalDetail_(mortgageBackground, 'view_mortgage_background', 'housing', '房贷背景', 'spread_lpr_gov_5y_bp|spread_lpr5y_ncd1y_bp|spread_lpr_mlf_1y_bp|spread_ncd_mlf_1y_bp|spread_dr007_omo_7d_bp', 'weekly', 210),
+      makeSignalDetail_(housingBackground, 'view_housing_background', 'housing', '住房背景', 'spread_local_gov_gov_5y_bp|spread_local_gov_gov_10y_bp|spread_aaa_lgfv_aaa_credit_1y_bp|spread_aaa_bank_bond_aaa_credit_1y_bp|spread_aaa_bank_bond_aaa_credit_3y_bp|spread_aaa_bank_bond_aaa_credit_5y_bp|spread_ncd_mlf_1y_bp|spread_lpr_gov_5y_bp', 'weekly', 220),
+      makeSignalDetail_(fxBackground, 'view_fx_background', 'fx', '汇率背景', 'spread_gov_ust_10y_bp|spread_gov_ust_2y_bp|usd_cny|usd_cny_ma20|usd_cny_prank250', 'daily', 230),
+      makeSignalDetail_(usdAllocationBackground, 'view_usd_allocation_background', 'fx', '美元配置背景', 'spread_gov_ust_10y_bp|spread_gov_ust_2y_bp|usd_broad|usd_broad_ma20|usd_cny_prank250', 'weekly', 240),
+      makeSignalDetail_(goldBackground, 'view_gold_background', 'hedge', '黄金背景', 'gold|gold_ma20|usd_cny_prank250|spread_gov_ust_10y_bp|spread_gov_ust_2y_bp|vix', 'weekly', 250),
       makeSignalDetail_(commodityBackground, 'view_commodity_background', 'macro', '顺周期商品背景', 'wti|brent|copper|vix|spx|nasdaq_100', 'weekly', 260)
     ]);
   }
@@ -357,6 +359,57 @@ function writeSignalDetailSheet_(sheet, rows) {
 }
 
 
+function ensureSignalMetricSchema_(sheet) {
+  if (!sheet || sheet.getLastRow() < 1 || sheet.getLastColumn() < 1) {
+    throw new Error('指标表为空，请先运行新版 buildMetrics_。');
+  }
+  var header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  var names = {};
+  for (var i = 0; i < header.length; i++) names[String(header[i] || '')] = true;
+
+  var required = [
+    'gov_10y',
+    'dr007_weighted_rate',
+    'gov_10y_prank250',
+    'slope_gov_10y_1y_bp',
+    'slope_gov_30y_10y_bp',
+    'spread_cdb_gov_10y_bp',
+    'spread_cdb_gov_10y_bp_prank250',
+    'spread_aaa_credit_gov_5y_bp',
+    'spread_aaa_credit_gov_5y_bp_prank250',
+    'spread_aa_plus_credit_aaa_credit_1y_bp',
+    'spread_aa_plus_credit_aaa_credit_1y_bp_prank250',
+    'aaa_ncd_1y_prank250',
+    'spread_gov_ust_10y_bp',
+    'usd_cny_prank250'
+  ];
+  var missing = [];
+  for (var j = 0; j < required.length; j++) {
+    if (!hasMetricColumnOrAlias_(names, required[j])) missing.push(required[j]);
+  }
+  if (missing.length) {
+    throw new Error('指标表字段缺失，请先运行新版 buildMetrics_。缺少字段: ' + missing.slice(0, 8).join(', '));
+  }
+}
+
+function bpThresholdFromLegacyPctPoint_(value) {
+  var n = toNumberOrNull_(value);
+  if (!isFiniteNumber_(n)) return n;
+  return Math.abs(n) <= 5 ? n * 100 : n;
+}
+
+function decimalThresholdFromLegacyPercent_(value) {
+  var n = toNumberOrNull_(value);
+  if (!isFiniteNumber_(n)) return n;
+  return Math.abs(n) >= 0.5 ? n / 100 : n;
+}
+
+function normalizeRateDecimalMaybe_(value) {
+  var n = toNumberOrNull_(value);
+  if (!isFiniteNumber_(n)) return n;
+  return Math.abs(n) >= 0.5 ? n / 100 : n;
+}
+
 function readMetricsRowsV2_(sheet) {
   var values = sheet.getDataRange().getValues();
   if (values.length < 2) return [];
@@ -375,26 +428,25 @@ function readMetricsRowsV2_(sheet) {
       dateKey: formatDateKey_(dateObj),
 
       gov_10y: readMetricNum_(r, idx, 'gov_10y'),
-      gov_slope_10_1: readMetricNum_(r, idx, 'gov_slope_10_1'),
-      gov_slope_30_10: readMetricNum_(r, idx, 'gov_slope_30_10'),
+      dr007_weighted_rate: readMetricNum_(r, idx, 'dr007_weighted_rate'),
+      slope_gov_10y_1y_bp: readMetricNum_(r, idx, 'slope_gov_10y_1y_bp'),
+      slope_gov_30y_10y_bp: readMetricNum_(r, idx, 'slope_gov_30y_10y_bp'),
 
-      spread_cdb_gov_10y: readMetricNum_(r, idx, 'spread_cdb_gov_10y'),
-      spread_cdb_gov_10y_pct250: readMetricNum_(r, idx, 'spread_cdb_gov_10y_pct250'),
+      spread_cdb_gov_10y_bp: readMetricNum_(r, idx, 'spread_cdb_gov_10y_bp'),
+      spread_cdb_gov_10y_bp_prank250: readMetricNum_(r, idx, 'spread_cdb_gov_10y_bp_prank250'),
 
-      spread_local_gov_gov_5y: readMetricNum_(r, idx, 'spread_local_gov_gov_5y'),
-      spread_local_gov_gov_10y: readMetricNum_(r, idx, 'spread_local_gov_gov_10y'),
+      spread_local_gov_gov_5y_bp: readMetricNum_(r, idx, 'spread_local_gov_gov_5y_bp'),
+      spread_local_gov_gov_10y_bp: readMetricNum_(r, idx, 'spread_local_gov_gov_10y_bp'),
 
-      spread_dr007_omo_7d: readMetricNum_(r, idx, 'spread_dr007_omo_7d'),
-      spread_lpr_1y_mlf_1y: readMetricNum_(r, idx, 'spread_lpr_1y_mlf_1y'),
-      spread_lpr_5y_gov_5y: readMetricNum_(r, idx, 'spread_lpr_5y_gov_5y'),
-      spread_lpr_5y_ncd_1y: readMetricNum_(r, idx, 'spread_lpr_5y_ncd_1y'),
-      spread_lpr5y_gov5y: readMetricNum_(r, idx, 'spread_lpr5y_gov5y'),
-      spread_ncd_1y_mlf_1y: readMetricNum_(r, idx, 'spread_ncd_1y_mlf_1y'),
-      spread_ncd_mlf_1y: readMetricNum_(r, idx, 'spread_ncd_mlf_1y'),
-      spread_lgfv_vs_high_grade_credit_1y: readMetricNum_(r, idx, 'spread_lgfv_vs_high_grade_credit_1y'),
-      spread_bank_bond_vs_high_grade_credit_1y: readMetricNum_(r, idx, 'spread_bank_bond_vs_high_grade_credit_1y'),
-      spread_bank_bond_vs_high_grade_credit_3y: readMetricNum_(r, idx, 'spread_bank_bond_vs_high_grade_credit_3y'),
-      spread_bank_bond_vs_high_grade_credit_5y: readMetricNum_(r, idx, 'spread_bank_bond_vs_high_grade_credit_5y'),
+      spread_dr007_omo_7d_bp: readMetricNum_(r, idx, 'spread_dr007_omo_7d_bp'),
+      spread_lpr_mlf_1y_bp: readMetricNum_(r, idx, 'spread_lpr_mlf_1y_bp'),
+      spread_lpr_gov_5y_bp: readMetricNum_(r, idx, 'spread_lpr_gov_5y_bp'),
+      spread_lpr5y_ncd1y_bp: readMetricNum_(r, idx, 'spread_lpr5y_ncd1y_bp'),
+      spread_ncd_mlf_1y_bp: readMetricNum_(r, idx, 'spread_ncd_mlf_1y_bp'),
+      spread_aaa_lgfv_aaa_credit_1y_bp: readMetricNum_(r, idx, 'spread_aaa_lgfv_aaa_credit_1y_bp'),
+      spread_aaa_bank_bond_aaa_credit_1y_bp: readMetricNum_(r, idx, 'spread_aaa_bank_bond_aaa_credit_1y_bp'),
+      spread_aaa_bank_bond_aaa_credit_3y_bp: readMetricNum_(r, idx, 'spread_aaa_bank_bond_aaa_credit_3y_bp'),
+      spread_aaa_bank_bond_aaa_credit_5y_bp: readMetricNum_(r, idx, 'spread_aaa_bank_bond_aaa_credit_5y_bp'),
 
       ust_2y: readMetricNum_(r, idx, 'ust_2y'),
       ust_10y: readMetricNum_(r, idx, 'ust_10y'),
@@ -408,37 +460,69 @@ function readMetricsRowsV2_(sheet) {
       spx: readMetricNum_(r, idx, 'spx'),
       nasdaq_100: readMetricNum_(r, idx, 'nasdaq_100'),
 
-      cn_us_10y_spread: readMetricNum_(r, idx, 'cn_us_10y_spread'),
-      cn_us_2y_spread: readMetricNum_(r, idx, 'cn_us_2y_spread'),
+      spread_gov_ust_10y_bp: readMetricNum_(r, idx, 'spread_gov_ust_10y_bp'),
+      spread_gov_ust_2y_bp: readMetricNum_(r, idx, 'spread_gov_ust_2y_bp'),
       usd_broad_ma20: readMetricNum_(r, idx, 'usd_broad_ma20'),
       usd_cny_ma20: readMetricNum_(r, idx, 'usd_cny_ma20'),
       gold_ma20: readMetricNum_(r, idx, 'gold_ma20'),
-      ust_10y_pct250: readMetricNum_(r, idx, 'ust_10y_pct250'),
-      usd_cny_pct250: readMetricNum_(r, idx, 'usd_cny_pct250'),
+      ust_10y_prank250: readMetricNum_(r, idx, 'ust_10y_prank250'),
+      usd_cny_prank250: readMetricNum_(r, idx, 'usd_cny_prank250'),
 
-      spread_aaa_credit_gov_5y: readMetricNum_(r, idx, 'spread_aaa_credit_gov_5y'),
-      spread_aaa_credit_gov_5y_pct250: readMetricNum_(r, idx, 'spread_aaa_credit_gov_5y_pct250'),
+      spread_aaa_credit_gov_5y_bp: readMetricNum_(r, idx, 'spread_aaa_credit_gov_5y_bp'),
+      spread_aaa_credit_gov_5y_bp_prank250: readMetricNum_(r, idx, 'spread_aaa_credit_gov_5y_bp_prank250'),
 
-      spread_aa_plus_vs_aaa_credit_1y: readMetricNum_(r, idx, 'spread_aa_plus_vs_aaa_credit_1y'),
-      spread_aa_plus_vs_aaa_credit_1y_pct250: readMetricNum_(r, idx, 'spread_aa_plus_vs_aaa_credit_1y_pct250'),
+      spread_aa_plus_credit_aaa_credit_1y_bp: readMetricNum_(r, idx, 'spread_aa_plus_credit_aaa_credit_1y_bp'),
+      spread_aa_plus_credit_aaa_credit_1y_bp_prank250: readMetricNum_(r, idx, 'spread_aa_plus_credit_aaa_credit_1y_bp_prank250'),
 
-      spread_aaa_mtn_vs_aaa_plus_mtn_1y: readMetricNum_(r, idx, 'spread_aaa_mtn_vs_aaa_plus_mtn_1y'),
+      spread_aaa_mtn_aaa_plus_mtn_1y_bp: readMetricNum_(r, idx, 'spread_aaa_mtn_aaa_plus_mtn_1y_bp'),
 
-      spread_aaa_credit_ncd_1y: readMetricNum_(r, idx, 'spread_aaa_credit_ncd_1y'),
+      spread_aaa_credit_ncd_1y_bp: readMetricNum_(r, idx, 'spread_aaa_credit_ncd_1y_bp'),
       aaa_ncd_1y: readMetricNum_(r, idx, 'aaa_ncd_1y'),
-      aaa_ncd_1y_pct250: readMetricNum_(r, idx, 'aaa_ncd_1y_pct250'),
+      aaa_ncd_1y_prank250: readMetricNum_(r, idx, 'aaa_ncd_1y_prank250'),
 
-      gov_10y_pct250: readMetricNum_(r, idx, 'gov_10y_pct250')
+      gov_10y_prank250: readMetricNum_(r, idx, 'gov_10y_prank250')
     });
   }
 
   return rows;
 }
 
+function getMetricCatalogMapForSignal_() {
+  if (!getMetricCatalogMapForSignal_.cache_) {
+    var map = {};
+    if (typeof METRIC_CATALOG_ !== 'undefined' && METRIC_CATALOG_) {
+      for (var i = 0; i < METRIC_CATALOG_.length; i++) {
+        map[METRIC_CATALOG_[i].code] = METRIC_CATALOG_[i];
+      }
+    }
+    getMetricCatalogMapForSignal_.cache_ = map;
+  }
+  return getMetricCatalogMapForSignal_.cache_;
+}
+
+function getMetricAliasesForSignal_(code) {
+  var item = getMetricCatalogMapForSignal_()[String(code || '')];
+  return item && item.aliases ? item.aliases : [];
+}
+
+function hasMetricColumnOrAlias_(names, code) {
+  if (names[code]) return true;
+  var aliases = getMetricAliasesForSignal_(code);
+  for (var i = 0; i < aliases.length; i++) {
+    if (names[aliases[i]]) return true;
+  }
+  return false;
+}
+
 function readMetricNum_(row, idx, colName) {
   var key = normalizeHeader_(colName);
-  if (!(key in idx)) return null;
-  return toNumberOrNull_(row[idx[key]]);
+  if (key in idx) return toNumberOrNull_(row[idx[key]]);
+  var aliases = getMetricAliasesForSignal_(colName);
+  for (var i = 0; i < aliases.length; i++) {
+    var aliasKey = normalizeHeader_(aliases[i]);
+    if (aliasKey in idx) return toNumberOrNull_(row[idx[aliasKey]]);
+  }
+  return null;
 }
 
 function readMoneyMarketDr007Map_(sheet) {
@@ -456,7 +540,7 @@ function readMoneyMarketDr007Map_(sheet) {
   for (var i = 1; i < values.length; i++) {
     var r = values[i];
     var dateObj = normalizeLooseDate_(r[dateCol]);
-    var dr007 = toNumberOrNull_(r[dr007Col]);
+    var dr007 = normalizeRateDecimalMaybe_(r[dr007Col]);
     if (!dateObj || !isFiniteNumber_(dr007)) continue;
     map[formatDateKey_(dateObj)] = dr007;
   }
@@ -467,25 +551,25 @@ function classifyLiquidityRegime_(dr007) {
   if (!isFiniteNumber_(dr007)) {
     return makeSignalResult_('资金与流动性：未知', 'unknown', 0, 'unknown', 'low', 'DR007 缺失，暂无法判断资金与流动性环境');
   }
-  if (dr007 >= SIGNAL_THRESHOLDS.funding_tight) {
+  if (dr007 >= decimalThresholdFromLegacyPercent_(SIGNAL_THRESHOLDS.funding_tight)) {
     return makeSignalResult_('资金与流动性：偏紧', 'tight', -1, 'tight', 'medium', 'DR007 偏高，资金与流动性环境对杠杆和短端负债不利');
   }
-  if (dr007 <= SIGNAL_THRESHOLDS.funding_loose) {
+  if (dr007 <= decimalThresholdFromLegacyPercent_(SIGNAL_THRESHOLDS.funding_loose)) {
     return makeSignalResult_('资金与流动性：偏松', 'loose', 1, 'loose', 'medium', 'DR007 偏低，资金与流动性环境对久期和票息策略更友好');
   }
   return makeSignalResult_('资金与流动性：中性', 'neutral', 0, 'neutral', 'low', 'DR007 处于中性区间');
 }
 
 function classifyDurationSignal_(row) {
-  var pct = row.gov_10y_pct250;
-  var slope = row.gov_slope_10_1;
+  var pct = row.gov_10y_prank250;
+  var slope = row.slope_gov_10y_1y_bp;
 
   if (!isFiniteNumber_(pct)) {
     return makeSignalResult_('利率债久期：中性', 'neutral', 0, 'neutral', 'low', '10Y 分位不足，利率债久期保持中性');
   }
 
   if (pct >= SIGNAL_THRESHOLDS.duration_pct_high) {
-    if (isFiniteNumber_(slope) && slope <= SIGNAL_THRESHOLDS.curve_10_1_flat) {
+    if (isFiniteNumber_(slope) && slope <= bpThresholdFromLegacyPctPoint_(SIGNAL_THRESHOLDS.curve_10_1_flat)) {
       return makeSignalResult_('利率债久期：偏长', 'long', 2, 'long', 'high', '10Y 利率高分位且曲线偏平，利率债长久期性价比更高');
     }
     return makeSignalResult_('利率债久期：中性偏长', 'long_mild', 1, 'long', 'medium', '10Y 利率偏高，可适度拉长利率债久期');
@@ -499,15 +583,15 @@ function classifyDurationSignal_(row) {
 }
 
 function classifyUltraLongSignal_(row) {
-  var slope = row.gov_slope_30_10;
+  var slope = row.slope_gov_30y_10y_bp;
   if (!isFiniteNumber_(slope)) {
     return makeSignalResult_('利率债超长端：中性', 'neutral', 0, 'neutral', 'low', '30Y-10Y 缺失，利率债超长端保持中性');
   }
 
-  if (slope >= SIGNAL_THRESHOLDS.ultra_long_slope_high) {
+  if (slope >= bpThresholdFromLegacyPctPoint_(SIGNAL_THRESHOLDS.ultra_long_slope_high)) {
     return makeSignalResult_('利率债超长端：超配', 'overweight', 1, 'ultra_long', 'medium', '30Y-10Y 偏陡，利率债超长端弹性更好');
   }
-  if (slope <= SIGNAL_THRESHOLDS.ultra_long_slope_low) {
+  if (slope <= bpThresholdFromLegacyPctPoint_(SIGNAL_THRESHOLDS.ultra_long_slope_low)) {
     return makeSignalResult_('利率债超长端：低配', 'underweight', -1, 'avoid_ultra_long', 'medium', '30Y-10Y 偏平，利率债超长端赔率下降');
   }
   return makeSignalResult_('利率债超长端：中性', 'neutral', 0, 'neutral', 'low', '30Y-10Y 处于中性区间，利率债超长端无明显优势');
@@ -546,22 +630,22 @@ function classifyRatesStrategyTilt_(ratesDuration, ratesUltraLong) {
 }
 
 function classifyCurveSignal_(row) {
-  var slope = row.gov_slope_10_1;
+  var slope = row.slope_gov_10y_1y_bp;
   if (!isFiniteNumber_(slope)) {
     return makeSignalResult_('利率债曲线：未知', 'unknown', 0, 'unknown', 'low', '10Y-1Y 缺失，无法判断利率债曲线形态');
   }
-  if (slope <= SIGNAL_THRESHOLDS.curve_10_1_flat) {
+  if (slope <= bpThresholdFromLegacyPctPoint_(SIGNAL_THRESHOLDS.curve_10_1_flat)) {
     return makeSignalResult_('利率债曲线：偏平', 'flat', 1, 'long_end', 'medium', '10Y-1Y 偏低，利率债长端相对更受益');
   }
-  if (slope >= SIGNAL_THRESHOLDS.curve_10_1_steep) {
+  if (slope >= bpThresholdFromLegacyPctPoint_(SIGNAL_THRESHOLDS.curve_10_1_steep)) {
     return makeSignalResult_('利率债曲线：偏陡', 'steep', -1, 'front_mid_end', 'medium', '10Y-1Y 偏高，利率债短中端相对更稳');
   }
   return makeSignalResult_('利率债曲线：中性', 'neutral', 0, 'neutral', 'low', '10Y-1Y 处于中性区间');
 }
 
 function classifyPolicyBankSignal_(row) {
-  var pct = row.spread_cdb_gov_10y_pct250;
-  var val = row.spread_cdb_gov_10y;
+  var pct = row.spread_cdb_gov_10y_bp_prank250;
+  var val = row.spread_cdb_gov_10y_bp;
   if (!isFiniteNumber_(val) || !isFiniteNumber_(pct)) {
     return makeSignalResult_('利率债相对价值：国开债 vs 国债：中性', 'neutral', 0, 'neutral', 'low', '国开-国债利差数据不足');
   }
@@ -576,14 +660,14 @@ function classifyPolicyBankSignal_(row) {
 }
 
 function classifyLocalGovSignal_(row) {
-  var v = row.spread_local_gov_gov_10y;
+  var v = row.spread_local_gov_gov_10y_bp;
   if (!isFiniteNumber_(v)) {
     return makeSignalResult_('利率债相对价值：地方债 vs 国债：中性', 'neutral', 0, 'neutral', 'low', '地方债数据不足或历史较短');
   }
-  if (v >= 0.20) {
+  if (v >= 20) {
     return makeSignalResult_('利率债相对价值：地方债占优', 'local_gov_cheap', 1, 'local_gov', 'medium', '地方债-国债利差偏高，地方债配置价值改善');
   }
-  if (v <= 0.08) {
+  if (v <= 8) {
     return makeSignalResult_('利率债相对价值：地方债偏贵', 'local_gov_rich', -1, 'gov', 'medium', '地方债-国债利差偏低，地方债性价比一般');
   }
   return makeSignalResult_('利率债相对价值：地方债 vs 国债：中性', 'neutral', 0, 'neutral', 'low', '地方债-国债利差处于中性区间');
@@ -633,8 +717,8 @@ function tieBreakRateRvOrder_(name) {
 }
 
 function classifyHighGradeCreditSignal_(row) {
-  var pct = row.spread_aaa_credit_gov_5y_pct250;
-  var v = row.spread_aaa_credit_gov_5y;
+  var pct = row.spread_aaa_credit_gov_5y_bp_prank250;
+  var v = row.spread_aaa_credit_gov_5y_bp;
   if (!isFiniteNumber_(v) || !isFiniteNumber_(pct)) {
     return makeSignalResult_('信用债资质：中性', 'neutral', 0, 'neutral', 'low', '高等级信用利差数据不足');
   }
@@ -649,8 +733,8 @@ function classifyHighGradeCreditSignal_(row) {
 }
 
 function classifyCreditSinkSignal_(row) {
-  var pct = row.spread_aa_plus_vs_aaa_credit_1y_pct250;
-  var v = row.spread_aa_plus_vs_aaa_credit_1y;
+  var pct = row.spread_aa_plus_credit_aaa_credit_1y_bp_prank250;
+  var v = row.spread_aa_plus_credit_aaa_credit_1y_bp;
   if (!isFiniteNumber_(v) || !isFiniteNumber_(pct)) {
     return makeSignalResult_('信用债下沉：中性', 'neutral', 0, 'neutral', 'low', '信用下沉利差数据不足');
   }
@@ -665,33 +749,33 @@ function classifyCreditSinkSignal_(row) {
 }
 
 function classifyMtnTierSignal_(row) {
-  var v = row.spread_aaa_mtn_vs_aaa_plus_mtn_1y;
+  var v = row.spread_aaa_mtn_aaa_plus_mtn_1y_bp;
   if (!isFiniteNumber_(v)) {
     return makeSignalResult_('信用债相对价值：AAA中票 vs AAA+中票：未知', 'unknown', 0, 'unknown', 'low', 'AAA/AAA+ 中票 1Y 利差缺失');
   }
-  if (v >= 0.08) {
+  if (v >= 8) {
     return makeSignalResult_('信用债相对价值：AAA中票占优', 'aaa_mtn_cheaper', 1, 'aaa_mtn', 'medium', 'AAA 中票相对 AAA+ 中票利差偏高');
   }
-  if (v <= 0.03) {
+  if (v <= 3) {
     return makeSignalResult_('信用债相对价值：AAA+中票占优', 'aaa_plus_mtn_steadier', -1, 'aaa_plus_mtn', 'medium', 'AAA/AAA+ 中票利差偏低，更偏基准化配置');
   }
   return makeSignalResult_('信用债相对价值：AAA中票 vs AAA+中票：中性', 'neutral', 0, 'neutral', 'low', 'AAA/AAA+ 中票利差处于中性区间');
 }
 
 function classifyNcdSignal_(row, dr007) {
-  var ncdPct = row.aaa_ncd_1y_pct250;
-  var creditNcdSpread = row.spread_aaa_credit_ncd_1y;
+  var ncdPct = row.aaa_ncd_1y_prank250;
+  var creditNcdSpread = row.spread_aaa_credit_ncd_1y_bp;
   if (!isFiniteNumber_(ncdPct) || !isFiniteNumber_(creditNcdSpread)) {
     return makeSignalResult_('短端票息资产：中性', 'neutral', 0, 'neutral', 'low', '存单/信用利差数据不足');
   }
 
-  if (ncdPct >= SIGNAL_THRESHOLDS.ncd_pct_high && creditNcdSpread >= 0.20) {
+  if (ncdPct >= SIGNAL_THRESHOLDS.ncd_pct_high && creditNcdSpread >= 20) {
     return makeSignalResult_('短端票息资产：高等级信用占优', 'short_credit_over_ncd', 1, 'short_credit', 'medium', '存单高位且信用-存单利差较高，短端高等级信用性价比提升');
   }
-  if (ncdPct <= SIGNAL_THRESHOLDS.ncd_pct_low && creditNcdSpread <= 0.12) {
+  if (ncdPct <= SIGNAL_THRESHOLDS.ncd_pct_low && creditNcdSpread <= 12) {
     return makeSignalResult_('短端票息资产：赔率偏低', 'low_edge', -1, 'cash_like', 'medium', '存单低位且信用-存单利差偏窄，短端赔率一般');
   }
-  if (isFiniteNumber_(dr007) && dr007 >= SIGNAL_THRESHOLDS.funding_tight) {
+  if (isFiniteNumber_(dr007) && dr007 >= decimalThresholdFromLegacyPercent_(SIGNAL_THRESHOLDS.funding_tight)) {
     return makeSignalResult_('短端票息资产：关注资金扰动', 'funding_watch', -1, 'watch_funding', 'medium', '资金偏紧，短端信用需关注负债端压力');
   }
   return makeSignalResult_('短端票息资产：中性', 'neutral', 0, 'neutral', 'low', '存单与短端信用关系中性');
@@ -717,29 +801,29 @@ function classifyCreditStrategyTilt_(creditQuality, creditSink) {
 }
 
 function classifyMortgageBackgroundSignal_(row) {
-  var lpr5Gov5 = firstFiniteNumber_([row.spread_lpr5y_gov5y, row.spread_lpr_5y_gov_5y]);
-  var lpr5Ncd1 = row.spread_lpr_5y_ncd_1y;
-  var lpr1Mlf1 = row.spread_lpr_1y_mlf_1y;
-  var ncdMlf1 = firstFiniteNumber_([row.spread_ncd_mlf_1y, row.spread_ncd_1y_mlf_1y]);
-  var dr007Omo = row.spread_dr007_omo_7d;
+  var lpr5Gov5 = row.spread_lpr_gov_5y_bp;
+  var lpr5Ncd1 = row.spread_lpr5y_ncd1y_bp;
+  var lpr1Mlf1 = row.spread_lpr_mlf_1y_bp;
+  var ncdMlf1 = row.spread_ncd_mlf_1y_bp;
+  var dr007Omo = row.spread_dr007_omo_7d_bp;
 
   if (!hasEnoughFiniteNumbers_([lpr5Gov5, lpr5Ncd1, lpr1Mlf1], 2)) {
     return makeSignalResult_('房贷背景：未知', 'unknown', 0, 'unknown', 'low', '房贷相关利差数据不足，暂无法判断房贷背景');
   }
 
-  var fundingTight = (isFiniteNumber_(ncdMlf1) && ncdMlf1 >= 0.35) || (isFiniteNumber_(dr007Omo) && dr007Omo >= 0.20);
-  var fundingLoose = (!isFiniteNumber_(ncdMlf1) || ncdMlf1 <= 0.12) && (!isFiniteNumber_(dr007Omo) || dr007Omo <= 0.08);
+  var fundingTight = (isFiniteNumber_(ncdMlf1) && ncdMlf1 >= 35) || (isFiniteNumber_(dr007Omo) && dr007Omo >= 20);
+  var fundingLoose = (!isFiniteNumber_(ncdMlf1) || ncdMlf1 <= 12) && (!isFiniteNumber_(dr007Omo) || dr007Omo <= 8);
 
-  var roomStrong = isFiniteNumber_(lpr5Gov5) && lpr5Gov5 >= 1.70 && isFiniteNumber_(lpr5Ncd1) && lpr5Ncd1 >= 1.80;
-  var roomOkay = isFiniteNumber_(lpr5Gov5) && lpr5Gov5 >= 1.40 && isFiniteNumber_(lpr5Ncd1) && lpr5Ncd1 >= 1.50;
-  var roomLimited = (isFiniteNumber_(lpr5Gov5) && lpr5Gov5 <= 1.10) ||
-    (isFiniteNumber_(lpr5Ncd1) && lpr5Ncd1 <= 1.20) ||
-    (isFiniteNumber_(lpr1Mlf1) && lpr1Mlf1 <= 0.35);
+  var roomStrong = isFiniteNumber_(lpr5Gov5) && lpr5Gov5 >= 170 && isFiniteNumber_(lpr5Ncd1) && lpr5Ncd1 >= 180;
+  var roomOkay = isFiniteNumber_(lpr5Gov5) && lpr5Gov5 >= 140 && isFiniteNumber_(lpr5Ncd1) && lpr5Ncd1 >= 150;
+  var roomLimited = (isFiniteNumber_(lpr5Gov5) && lpr5Gov5 <= 110) ||
+    (isFiniteNumber_(lpr5Ncd1) && lpr5Ncd1 <= 120) ||
+    (isFiniteNumber_(lpr1Mlf1) && lpr1Mlf1 <= 35);
 
   if (roomStrong && !fundingTight) {
     return makeSignalResult_('房贷背景：下行背景增强', 'easing_bias', 2, 'easing', 'high', '5Y LPR 与国债/存单利差仍较宽，且银行负债端未明显偏紧，后续房贷利率下行背景增强；可关注重定价窗口，但不等同于房价立刻上涨');
   }
-  if ((roomOkay && fundingLoose) || (roomOkay && !fundingTight && isFiniteNumber_(lpr1Mlf1) && lpr1Mlf1 >= 0.55)) {
+  if ((roomOkay && fundingLoose) || (roomOkay && !fundingTight && isFiniteNumber_(lpr1Mlf1) && lpr1Mlf1 >= 55)) {
     return makeSignalResult_('房贷背景：偏友好，可关注重定价窗口', 'watch_reset_window', 1, 'mild_easing', 'medium', '贷款报价与市场利率之间仍有一定缓冲，且银行负债端压力不大，可关注后续重定价或按揭利率优化窗口');
   }
   if (fundingTight && !roomStrong) {
@@ -752,15 +836,15 @@ function classifyMortgageBackgroundSignal_(row) {
 }
 
 function classifyHousingBackgroundSignal_(row) {
-  var localAvg = meanFiniteNumbers_([row.spread_local_gov_gov_5y, row.spread_local_gov_gov_10y]);
-  var lgfvSpread = row.spread_lgfv_vs_high_grade_credit_1y;
+  var localAvg = meanFiniteNumbers_([row.spread_local_gov_gov_5y_bp, row.spread_local_gov_gov_10y_bp]);
+  var lgfvSpread = row.spread_aaa_lgfv_aaa_credit_1y_bp;
   var bankAvg = meanFiniteNumbers_([
-    row.spread_bank_bond_vs_high_grade_credit_1y,
-    row.spread_bank_bond_vs_high_grade_credit_3y,
-    row.spread_bank_bond_vs_high_grade_credit_5y
+    row.spread_aaa_bank_bond_aaa_credit_1y_bp,
+    row.spread_aaa_bank_bond_aaa_credit_3y_bp,
+    row.spread_aaa_bank_bond_aaa_credit_5y_bp
   ]);
-  var ncdMlf1 = firstFiniteNumber_([row.spread_ncd_mlf_1y, row.spread_ncd_1y_mlf_1y]);
-  var lpr5Gov5 = firstFiniteNumber_([row.spread_lpr5y_gov5y, row.spread_lpr_5y_gov_5y]);
+  var ncdMlf1 = row.spread_ncd_mlf_1y_bp;
+  var lpr5Gov5 = row.spread_lpr_gov_5y_bp;
 
   if (!hasEnoughFiniteNumbers_([localAvg, lgfvSpread, bankAvg, ncdMlf1, lpr5Gov5], 3)) {
     return makeSignalResult_('住房背景：未知', 'unknown', 0, 'unknown', 'low', '住房相关融资利差数据不足，暂无法判断住房背景');
@@ -770,50 +854,50 @@ function classifyHousingBackgroundSignal_(row) {
   var notes = [];
 
   if (isFiniteNumber_(localAvg)) {
-    if (localAvg <= 0.10) {
+    if (localAvg <= 10) {
       warmScore += 1;
       notes.push('地方债-国债利差偏低，地方财政融资压力相对可控');
-    } else if (localAvg >= 0.18) {
+    } else if (localAvg >= 18) {
       warmScore -= 1;
       notes.push('地方债-国债利差偏高，地方财政与项目端压力仍在');
     }
   }
 
   if (isFiniteNumber_(lgfvSpread)) {
-    if (lgfvSpread <= 0.15) {
+    if (lgfvSpread <= 15) {
       warmScore += 1;
       notes.push('城投相对高等级信用利差不高，地产链相关融资环境边际更稳');
-    } else if (lgfvSpread >= 0.30) {
+    } else if (lgfvSpread >= 30) {
       warmScore -= 1;
       notes.push('城投相对高等级信用利差偏高，地产链相关融资环境仍偏谨慎');
     }
   }
 
   if (isFiniteNumber_(bankAvg)) {
-    if (bankAvg <= 0.02) {
+    if (bankAvg <= 2) {
       warmScore += 1;
       notes.push('银行债相对高等级信用利差较低，银行体系融资环境较顺');
-    } else if (bankAvg >= 0.12) {
+    } else if (bankAvg >= 12) {
       warmScore -= 1;
       notes.push('银行债相对高等级信用利差偏高，银行信用投放环境仍偏保守');
     }
   }
 
   if (isFiniteNumber_(ncdMlf1)) {
-    if (ncdMlf1 <= 0.10) {
+    if (ncdMlf1 <= 10) {
       warmScore += 1;
       notes.push('存单相对 MLF 利差不高，银行负债端压力较轻');
-    } else if (ncdMlf1 >= 0.30) {
+    } else if (ncdMlf1 >= 30) {
       warmScore -= 1;
       notes.push('存单相对 MLF 利差偏高，银行负债端仍有掣肘');
     }
   }
 
   if (isFiniteNumber_(lpr5Gov5)) {
-    if (lpr5Gov5 <= 1.40) {
+    if (lpr5Gov5 <= 140) {
       warmScore += 1;
       notes.push('5Y LPR 相对 5Y 国债利差已不高，居民按揭利率背景相对友好');
-    } else if (lpr5Gov5 >= 1.90) {
+    } else if (lpr5Gov5 >= 190) {
       warmScore -= 1;
       notes.push('5Y LPR 相对 5Y 国债利差仍高，住房融资成本背景仍偏冷');
     }
@@ -837,11 +921,11 @@ function classifyHousingBackgroundSignal_(row) {
 
 
 function classifyFxBackgroundSignal_(row) {
-  var spread10 = row.cn_us_10y_spread;
-  var spread2 = row.cn_us_2y_spread;
+  var spread10 = row.spread_gov_ust_10y_bp;
+  var spread2 = row.spread_gov_ust_2y_bp;
   var fx = row.usd_cny;
   var fxMa20 = row.usd_cny_ma20;
-  var fxPct = row.usd_cny_pct250;
+  var fxPct = row.usd_cny_prank250;
 
   if (!hasEnoughFiniteNumbers_([spread10, spread2, fx, fxMa20, fxPct], 3)) {
     return makeSignalResult_('汇率背景：未知', 'unknown', 0, 'unknown', 'low', '中美利差或人民币汇率数据不足，暂无法判断人民币背景');
@@ -851,13 +935,13 @@ function classifyFxBackgroundSignal_(row) {
   var notes = [];
 
   if (isFiniteNumber_(spread10)) {
-    if (spread10 <= -1.60) { score += 1; notes.push('中美10Y利差偏负，人民币外部利差压力偏大'); }
-    else if (spread10 >= -0.60) { score -= 1; notes.push('中美10Y利差压力相对收敛'); }
+    if (spread10 <= -160) { score += 1; notes.push('中美10Y利差偏负，人民币外部利差压力偏大'); }
+    else if (spread10 >= -60) { score -= 1; notes.push('中美10Y利差压力相对收敛'); }
   }
 
   if (isFiniteNumber_(spread2)) {
-    if (spread2 <= -2.00) { score += 1; notes.push('中美2Y利差偏负，短端利差对人民币仍有约束'); }
-    else if (spread2 >= -1.00) { score -= 1; notes.push('中美2Y利差压力相对缓和'); }
+    if (spread2 <= -200) { score += 1; notes.push('中美2Y利差偏负，短端利差对人民币仍有约束'); }
+    else if (spread2 >= -100) { score -= 1; notes.push('中美2Y利差压力相对缓和'); }
   }
 
   if (isFiniteNumber_(fx) && isFiniteNumber_(fxMa20)) {
@@ -882,9 +966,9 @@ function classifyFxBackgroundSignal_(row) {
 function classifyUsdAllocationBackgroundSignal_(row) {
   var usd = row.usd_broad;
   var usdMa20 = row.usd_broad_ma20;
-  var spread10 = row.cn_us_10y_spread;
-  var spread2 = row.cn_us_2y_spread;
-  var fxPct = row.usd_cny_pct250;
+  var spread10 = row.spread_gov_ust_10y_bp;
+  var spread2 = row.spread_gov_ust_2y_bp;
+  var fxPct = row.usd_cny_prank250;
 
   if (!hasEnoughFiniteNumbers_([usd, usdMa20, spread10, spread2, fxPct], 3)) {
     return makeSignalResult_('美元配置背景：未知', 'unknown', 0, 'unknown', 'low', '美元指数或中美利差数据不足，暂无法判断美元配置背景');
@@ -898,10 +982,10 @@ function classifyUsdAllocationBackgroundSignal_(row) {
     else if (usd <= usdMa20 * 0.99) { score -= 1; notes.push('美元 broad 指数低于20日均值'); }
   }
 
-  if ((isFiniteNumber_(spread10) && spread10 <= -1.60) || (isFiniteNumber_(spread2) && spread2 <= -2.00)) {
+  if ((isFiniteNumber_(spread10) && spread10 <= -160) || (isFiniteNumber_(spread2) && spread2 <= -200)) {
     score += 1;
     notes.push('中美利差对美元相对有利');
-  } else if ((isFiniteNumber_(spread10) && spread10 >= -0.60) && (isFiniteNumber_(spread2) && spread2 >= -1.00)) {
+  } else if ((isFiniteNumber_(spread10) && spread10 >= -60) && (isFiniteNumber_(spread2) && spread2 >= -100)) {
     score -= 1;
     notes.push('中美利差压力阶段性缓和');
   }
@@ -923,9 +1007,9 @@ function classifyUsdAllocationBackgroundSignal_(row) {
 function classifyGoldBackgroundSignal_(row) {
   var gold = row.gold;
   var goldMa20 = row.gold_ma20;
-  var fxPct = row.usd_cny_pct250;
-  var spread10 = row.cn_us_10y_spread;
-  var spread2 = row.cn_us_2y_spread;
+  var fxPct = row.usd_cny_prank250;
+  var spread10 = row.spread_gov_ust_10y_bp;
+  var spread2 = row.spread_gov_ust_2y_bp;
   var vix = row.vix;
 
   if (!hasEnoughFiniteNumbers_([gold, goldMa20, fxPct, spread10, spread2], 3)) {
@@ -945,10 +1029,10 @@ function classifyGoldBackgroundSignal_(row) {
     else if (fxPct <= 0.35) { score -= 1; notes.push('人民币偏稳时，黄金的本币对冲需求下降'); }
   }
 
-  if ((isFiniteNumber_(spread10) && spread10 <= -1.60) || (isFiniteNumber_(spread2) && spread2 <= -2.00)) {
+  if ((isFiniteNumber_(spread10) && spread10 <= -160) || (isFiniteNumber_(spread2) && spread2 <= -200)) {
     score += 1;
     notes.push('中美利差偏负，黄金背景更受支撑');
-  } else if ((isFiniteNumber_(spread10) && spread10 >= -0.60) && (isFiniteNumber_(spread2) && spread2 >= -1.00)) {
+  } else if ((isFiniteNumber_(spread10) && spread10 >= -60) && (isFiniteNumber_(spread2) && spread2 >= -100)) {
     score -= 1;
     notes.push('中美利差压力缓和，黄金的对冲吸引力下降');
   }

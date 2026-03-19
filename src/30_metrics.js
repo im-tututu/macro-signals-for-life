@@ -18,25 +18,85 @@
  ********************/
 
 function buildMetrics_() {
-  Logger.log('buildMetrics_ v5 running');
+  return buildMetricsFast_();
+}
+
+function buildMetricsFast_() {
+  return buildMetricsCore_({
+    buildDictionary: false,
+    fullRebuild: false,
+    recentWindowSize: 320,
+    logTag: 'buildMetricsFast_'
+  });
+}
+
+function buildMetricsFull_() {
+  return buildMetricsCore_({
+    buildDictionary: true,
+    fullRebuild: true,
+    recentWindowSize: 320,
+    logTag: 'buildMetricsFull_'
+  });
+}
+
+function buildMetricDictionary_() {
+  var ss = SpreadsheetApp.getActive();
+  var metricSheet = ss.getSheetByName(SHEET_METRICS);
+  if (!metricSheet) throw new Error('找不到工作表: ' + SHEET_METRICS);
+
+  Logger.log('▶️ 指标说明重建 | start');
+  var started = Date.now();
+  var lastRow = metricSheet.getLastRow();
+  var lastCol = metricSheet.getLastColumn();
+  if (lastRow < 1 || lastCol < 1) throw new Error('指标表为空，无法生成指标说明');
+
+  var t0 = Date.now();
+  var out = metricSheet.getRange(1, 1, lastRow, lastCol).getValues();
+  Logger.log('buildMetricDictionary_ | metrics_loaded_ms=' + (Date.now() - t0) + ' | rows=' + Math.max(0, lastRow - 1) + ' | cols=' + lastCol);
+  if (!out || !out.length) throw new Error('指标表为空，无法生成指标说明');
+
+  t0 = Date.now();
+  buildMetricDictionarySheet_(ss, out[0], out);
+  Logger.log('buildMetricDictionary_ | dictionary_written_ms=' + (Date.now() - t0));
+  Logger.log('✅ 指标说明重建 | done | elapsed_ms=' + (Date.now() - started) + ' | rows=' + Math.max(0, out.length - 1));
+}
+
+function buildMetricsCore_(options) {
+  options = options || {};
+  var buildDictionary = !!options.buildDictionary;
+  var fullRebuild = !!options.fullRebuild;
+  var recentWindowSize = Math.max(260, Number(options.recentWindowSize || 320));
+  var logTag = options.logTag || 'buildMetricsCore_';
+  var started = Date.now();
+
+  Logger.log('▶️ ' + logTag + ' | start | dictionary=' + (buildDictionary ? 'yes' : 'no') + ' | mode=' + (fullRebuild ? 'full' : 'recent'));
 
   var ss = SpreadsheetApp.getActive();
   var curveSheet = ss.getSheetByName(SHEET_CURVE_RAW);
   if (!curveSheet) throw new Error('找不到工作表: ' + SHEET_CURVE_RAW);
 
   var dst = ss.getSheetByName(SHEET_METRICS) || ss.insertSheet(SHEET_METRICS);
+  var t0 = Date.now();
   var curveValues = curveSheet.getDataRange().getValues();
   var header = buildMetricsHeader_();
+  Logger.log(logTag + ' | curve_loaded_ms=' + (Date.now() - t0) + ' | curve_rows=' + Math.max(0, curveValues.length - 1));
 
   if (curveValues.length < 2) {
     writeMetricsOutput_(dst, [header]);
-    return;
+    if (buildDictionary) buildMetricDictionarySheet_(ss, header, [header]);
+    Logger.log('✅ ' + logTag + ' | done | elapsed_ms=' + (Date.now() - started) + ' | rows=0');
+    return {
+      rowCount: 0,
+      dictionaryBuilt: buildDictionary,
+      fullRebuild: fullRebuild
+    };
   }
 
   var rawHeader = curveValues[0];
   var termIndex = buildTermColumnIndex_(rawHeader);
   var curveByDate = buildCurveBucketByDate_(curveValues);
 
+  t0 = Date.now();
   var moneySheet = ss.getSheetByName(SHEET_MONEY_MARKET_RAW);
   var moneyMap = moneySheet ? readMoneyMarketMetricsMap_(moneySheet) : {};
 
@@ -45,8 +105,25 @@ function buildMetrics_() {
 
   var overseasSheet = ss.getSheetByName(SHEET_OVERSEAS_MACRO_RAW);
   var overseasTimeline = overseasSheet ? readOverseasMacroTimeline_(overseasSheet) : [];
+  Logger.log(logTag + ' | aux_loaded_ms=' + (Date.now() - t0) + ' | money_dates=' + Object.keys(moneyMap).length + ' | policy_points=' + policyTimeline.length + ' | overseas_points=' + overseasTimeline.length);
 
-  var dates = Object.keys(curveByDate).sort();
+  var allDates = Object.keys(curveByDate).sort();
+  var dates = allDates;
+  var cutoffDate = '';
+  var preservedRows = [];
+  var usedExistingTail = false;
+
+  if (!fullRebuild && allDates.length > recentWindowSize) {
+    cutoffDate = allDates[allDates.length - recentWindowSize];
+    dates = allDates.slice(allDates.length - recentWindowSize);
+
+    t0 = Date.now();
+    var existing = readExistingMetricsForFastMerge_(dst, header, cutoffDate);
+    preservedRows = existing.rows;
+    usedExistingTail = existing.usedExistingTail;
+    Logger.log(logTag + ' | existing_tail_loaded_ms=' + (Date.now() - t0) + ' | cutoff=' + cutoffDate + ' | preserved_rows=' + preservedRows.length + ' | used=' + (usedExistingTail ? 'yes' : 'no'));
+  }
+
   var rows = [];
 
   var policyState = {
@@ -75,6 +152,7 @@ function buildMetrics_() {
   var policyPtr = 0;
   var overseasPtr = 0;
 
+  t0 = Date.now();
   for (var i = 0; i < dates.length; i++) {
     var dateKey = dates[i];
 
@@ -99,124 +177,81 @@ function buildMetrics_() {
       )
     );
   }
+  Logger.log(logTag + ' | base_rows_built_ms=' + (Date.now() - t0) + ' | rows=' + rows.length + ' | source_dates=' + dates.length);
 
+  t0 = Date.now();
   applyRollingMetrics_(rows);
   rows.reverse();
+  Logger.log(logTag + ' | rolling_done_ms=' + (Date.now() - t0));
 
+  t0 = Date.now();
   var out = [header];
   for (var j = 0; j < rows.length; j++) {
     out.push(metricsRowToArray_(rows[j], header));
   }
+  if (!fullRebuild && usedExistingTail && preservedRows.length) {
+    for (var p = 0; p < preservedRows.length; p++) {
+      out.push(preservedRows[p]);
+    }
+  }
+  Logger.log(logTag + ' | output_assembled_ms=' + (Date.now() - t0) + ' | final_rows=' + Math.max(0, out.length - 1));
 
+  t0 = Date.now();
   writeMetricsOutput_(dst, out);
-  Logger.log(SHEET_METRICS + ' 已重建，共 ' + Math.max(0, out.length - 1) + ' 条');
+  Logger.log(logTag + ' | metrics_written_ms=' + (Date.now() - t0));
+
+  if (buildDictionary) {
+    t0 = Date.now();
+    buildMetricDictionarySheet_(ss, header, out);
+    Logger.log(logTag + ' | dictionary_written_ms=' + (Date.now() - t0));
+  }
+
+  Logger.log('✅ ' + logTag + ' | done | elapsed_ms=' + (Date.now() - started) + ' | rows=' + Math.max(0, out.length - 1) + ' | dictionary=' + (buildDictionary ? 'yes' : 'no') + ' | mode=' + (fullRebuild ? 'full' : 'recent'));
+  return {
+    rowCount: Math.max(0, out.length - 1),
+    dictionaryBuilt: buildDictionary,
+    fullRebuild: fullRebuild
+  };
+}
+
+function readExistingMetricsForFastMerge_(sheet, header, cutoffDate) {
+  var result = {
+    usedExistingTail: false,
+    rows: []
+  };
+  if (!sheet || !cutoffDate) return result;
+
+  var lastRow = sheet.getLastRow();
+  var lastCol = sheet.getLastColumn();
+  if (lastRow < 2 || lastCol !== header.length) return result;
+
+  var existing = sheet.getRange(1, 1, lastRow, lastCol).getValues();
+  if (!existing || existing.length < 2) return result;
+  if (!sameMetricHeader_(existing[0], header)) return result;
+
+  for (var i = 1; i < existing.length; i++) {
+    var row = existing[i];
+    var dateKey = normYMD_(row[0]);
+    if (!dateKey) continue;
+    if (dateKey < cutoffDate) {
+      result.rows.push(row);
+    }
+  }
+  result.usedExistingTail = true;
+  return result;
+}
+
+function sameMetricHeader_(a, b) {
+  if (!a || !b || a.length !== b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    if (String(a[i] || '') !== String(b[i] || '')) return false;
+  }
+  return true;
 }
 
 function buildMetricsHeader_() {
-  return [
-    'date',
-
-    'gov_1y', 'gov_2y', 'gov_3y', 'gov_5y', 'gov_10y', 'gov_30y',
-    'cdb_3y', 'cdb_5y', 'cdb_10y',
-
-    'aaa_credit_1y', 'aaa_credit_3y', 'aaa_credit_5y',
-    'aa_plus_credit_1y',
-
-    'aaa_plus_mtn_1y',
-    'aaa_mtn_1y', 'aaa_mtn_3y', 'aaa_mtn_5y',
-
-    'aaa_ncd_1y',
-
-    'aaa_bank_bond_1y', 'aaa_bank_bond_3y', 'aaa_bank_bond_5y',
-    'aaa_lgfv_1y',
-
-    'local_gov_5y', 'local_gov_10y',
-
-    'dr007_weighted_rate',
-    'omo_7d',
-    'mlf_1y',
-    'lpr_1y',
-    'lpr_5y',
-
-    'ust_2y',
-    'ust_10y',
-    'usd_broad',
-    'usd_cny',
-    'gold',
-    'wti',
-    'brent',
-    'copper',
-    'vix',
-    'spx',
-    'nasdaq_100',
-
-    'gov_slope_10_1',
-    'gov_slope_10_3',
-    'gov_slope_30_10',
-    'cdb_slope_10_3',
-
-    'spread_cdb_gov_3y',
-    'spread_cdb_gov_5y',
-    'spread_cdb_gov_10y',
-
-    'spread_local_gov_gov_5y',
-    'spread_local_gov_gov_10y',
-
-    'spread_aaa_credit_gov_1y',
-    'spread_aaa_credit_gov_3y',
-    'spread_aaa_credit_gov_5y',
-
-    'spread_aa_plus_vs_aaa_credit_1y',
-    'spread_aaa_plus_mtn_gov_1y',
-
-    'spread_aaa_mtn_vs_aaa_plus_mtn_1y',
-    'spread_aaa_credit_ncd_1y',
-
-    'spread_aaa_bank_vs_aaa_credit_1y',
-    'spread_aaa_bank_vs_aaa_credit_3y',
-    'spread_aaa_bank_vs_aaa_credit_5y',
-
-    'spread_aaa_lgfv_vs_aaa_credit_1y',
-
-    'spread_dr007_omo_7d',
-    'spread_ncd_1y_mlf_1y',
-    'spread_gov_1y_mlf_1y',
-    'spread_lpr_1y_mlf_1y',
-    'spread_lpr_5y_gov_5y',
-    'spread_lpr_5y_ncd_1y',
-
-    'spread_lgfv_vs_high_grade_credit_1y',
-    'spread_bank_bond_vs_high_grade_credit_1y',
-    'spread_bank_bond_vs_high_grade_credit_3y',
-    'spread_bank_bond_vs_high_grade_credit_5y',
-    'spread_ncd_mlf_1y',
-    'spread_lpr5y_gov5y',
-
-    'cn_us_10y_spread',
-    'cn_us_2y_spread',
-    'usd_broad_ma20',
-    'usd_cny_ma20',
-    'gold_ma20',
-    'ust_10y_pct250',
-    'usd_cny_pct250',
-
-    'gov_10y_ma20',
-    'gov_10y_ma60',
-    'gov_10y_ma120',
-    'gov_10y_pct250',
-
-    'spread_cdb_gov_10y_ma20',
-    'spread_cdb_gov_10y_pct250',
-
-    'spread_aaa_credit_gov_5y_ma20',
-    'spread_aaa_credit_gov_5y_pct250',
-
-    'spread_aa_plus_vs_aaa_credit_1y_ma20',
-    'spread_aa_plus_vs_aaa_credit_1y_pct250',
-
-    'aaa_ncd_1y_ma20',
-    'aaa_ncd_1y_pct250'
-  ];
+  var codes = getMetricCatalogCodes_();
+  return ['date'].concat(codes);
 }
 
 function buildCurveBucketByDate_(curveValues) {
@@ -280,14 +315,14 @@ function buildMetricsBaseRow_(dateKey, bucket, termIndex, moneyRow, policyState,
   row.local_gov_5y = getCurvePoint_(bucket, '地方债', 'Y_5', termIndex);
   row.local_gov_10y = getCurvePoint_(bucket, '地方债', 'Y_10', termIndex);
 
-  row.dr007_weighted_rate = pickMetricOrBlank_(moneyRow.dr007_weighted_rate);
-  row.omo_7d = pickMetricOrBlank_(policyState.omo_7d);
-  row.mlf_1y = pickMetricOrBlank_(policyState.mlf_1y);
-  row.lpr_1y = pickMetricOrBlank_(policyState.lpr_1y);
-  row.lpr_5y = pickMetricOrBlank_(policyState.lpr_5y);
+  row.dr007_weighted_rate = pctValueOrBlank_(moneyRow.dr007_weighted_rate);
+  row.omo_7d = pctValueOrBlank_(policyState.omo_7d);
+  row.mlf_1y = pctValueOrBlank_(policyState.mlf_1y);
+  row.lpr_1y = pctValueOrBlank_(policyState.lpr_1y);
+  row.lpr_5y = pctValueOrBlank_(policyState.lpr_5y);
 
-  row.ust_2y = pickMetricOrBlank_(overseasState.ust_2y);
-  row.ust_10y = pickMetricOrBlank_(overseasState.ust_10y);
+  row.ust_2y = pctValueOrBlank_(overseasState.ust_2y);
+  row.ust_10y = pctValueOrBlank_(overseasState.ust_10y);
   row.usd_broad = pickMetricOrBlank_(overseasState.usd_broad);
   row.usd_cny = pickMetricOrBlank_(overseasState.usd_cny);
   row.gold = pickMetricOrBlank_(overseasState.gold);
@@ -298,75 +333,67 @@ function buildMetricsBaseRow_(dateKey, bucket, termIndex, moneyRow, policyState,
   row.spx = pickMetricOrBlank_(overseasState.spx);
   row.nasdaq_100 = pickMetricOrBlank_(overseasState.nasdaq_100);
 
-  row.gov_slope_10_1 = safeSubOrBlank_(row.gov_10y, row.gov_1y);
-  row.gov_slope_10_3 = safeSubOrBlank_(row.gov_10y, row.gov_3y);
-  row.gov_slope_30_10 = safeSubOrBlank_(row.gov_30y, row.gov_10y);
-  row.cdb_slope_10_3 = safeSubOrBlank_(row.cdb_10y, row.cdb_3y);
+  row.slope_gov_10y_1y_bp = safeSpreadBpOrBlank_(row.gov_10y, row.gov_1y);
+  row.slope_gov_10y_3y_bp = safeSpreadBpOrBlank_(row.gov_10y, row.gov_3y);
+  row.slope_gov_30y_10y_bp = safeSpreadBpOrBlank_(row.gov_30y, row.gov_10y);
+  row.slope_cdb_10y_3y_bp = safeSpreadBpOrBlank_(row.cdb_10y, row.cdb_3y);
 
-  row.spread_cdb_gov_3y = safeSubOrBlank_(row.cdb_3y, row.gov_3y);
-  row.spread_cdb_gov_5y = safeSubOrBlank_(row.cdb_5y, row.gov_5y);
-  row.spread_cdb_gov_10y = safeSubOrBlank_(row.cdb_10y, row.gov_10y);
+  row.spread_cdb_gov_3y_bp = safeSpreadBpOrBlank_(row.cdb_3y, row.gov_3y);
+  row.spread_cdb_gov_5y_bp = safeSpreadBpOrBlank_(row.cdb_5y, row.gov_5y);
+  row.spread_cdb_gov_10y_bp = safeSpreadBpOrBlank_(row.cdb_10y, row.gov_10y);
 
-  row.spread_local_gov_gov_5y = safeSubOrBlank_(row.local_gov_5y, row.gov_5y);
-  row.spread_local_gov_gov_10y = safeSubOrBlank_(row.local_gov_10y, row.gov_10y);
+  row.spread_local_gov_gov_5y_bp = safeSpreadBpOrBlank_(row.local_gov_5y, row.gov_5y);
+  row.spread_local_gov_gov_10y_bp = safeSpreadBpOrBlank_(row.local_gov_10y, row.gov_10y);
 
-  row.spread_aaa_credit_gov_1y = safeSubOrBlank_(row.aaa_credit_1y, row.gov_1y);
-  row.spread_aaa_credit_gov_3y = safeSubOrBlank_(row.aaa_credit_3y, row.gov_3y);
-  row.spread_aaa_credit_gov_5y = safeSubOrBlank_(row.aaa_credit_5y, row.gov_5y);
+  row.spread_aaa_credit_gov_1y_bp = safeSpreadBpOrBlank_(row.aaa_credit_1y, row.gov_1y);
+  row.spread_aaa_credit_gov_3y_bp = safeSpreadBpOrBlank_(row.aaa_credit_3y, row.gov_3y);
+  row.spread_aaa_credit_gov_5y_bp = safeSpreadBpOrBlank_(row.aaa_credit_5y, row.gov_5y);
 
-  row.spread_aa_plus_vs_aaa_credit_1y = safeSubOrBlank_(row.aa_plus_credit_1y, row.aaa_credit_1y);
-  row.spread_aaa_plus_mtn_gov_1y = safeSubOrBlank_(row.aaa_plus_mtn_1y, row.gov_1y);
+  row.spread_aa_plus_credit_aaa_credit_1y_bp = safeSpreadBpOrBlank_(row.aa_plus_credit_1y, row.aaa_credit_1y);
+  row.spread_aaa_plus_mtn_gov_1y_bp = safeSpreadBpOrBlank_(row.aaa_plus_mtn_1y, row.gov_1y);
 
-  row.spread_aaa_mtn_vs_aaa_plus_mtn_1y = safeSubOrBlank_(row.aaa_mtn_1y, row.aaa_plus_mtn_1y);
-  row.spread_aaa_credit_ncd_1y = safeSubOrBlank_(row.aaa_credit_1y, row.aaa_ncd_1y);
+  row.spread_aaa_mtn_aaa_plus_mtn_1y_bp = safeSpreadBpOrBlank_(row.aaa_mtn_1y, row.aaa_plus_mtn_1y);
+  row.spread_aaa_credit_ncd_1y_bp = safeSpreadBpOrBlank_(row.aaa_credit_1y, row.aaa_ncd_1y);
 
-  row.spread_aaa_bank_vs_aaa_credit_1y = safeSubOrBlank_(row.aaa_bank_bond_1y, row.aaa_credit_1y);
-  row.spread_aaa_bank_vs_aaa_credit_3y = safeSubOrBlank_(row.aaa_bank_bond_3y, row.aaa_credit_3y);
-  row.spread_aaa_bank_vs_aaa_credit_5y = safeSubOrBlank_(row.aaa_bank_bond_5y, row.aaa_credit_5y);
+  row.spread_aaa_bank_bond_aaa_credit_1y_bp = safeSpreadBpOrBlank_(row.aaa_bank_bond_1y, row.aaa_credit_1y);
+  row.spread_aaa_bank_bond_aaa_credit_3y_bp = safeSpreadBpOrBlank_(row.aaa_bank_bond_3y, row.aaa_credit_3y);
+  row.spread_aaa_bank_bond_aaa_credit_5y_bp = safeSpreadBpOrBlank_(row.aaa_bank_bond_5y, row.aaa_credit_5y);
 
-  row.spread_aaa_lgfv_vs_aaa_credit_1y = safeSubOrBlank_(row.aaa_lgfv_1y, row.aaa_credit_1y);
+  row.spread_aaa_lgfv_aaa_credit_1y_bp = safeSpreadBpOrBlank_(row.aaa_lgfv_1y, row.aaa_credit_1y);
 
-  // P4：政策—市场联动指标
-  row.spread_dr007_omo_7d = safeSubOrBlank_(row.dr007_weighted_rate, row.omo_7d);
-  row.spread_ncd_1y_mlf_1y = safeSubOrBlank_(row.aaa_ncd_1y, row.mlf_1y);
-  row.spread_gov_1y_mlf_1y = safeSubOrBlank_(row.gov_1y, row.mlf_1y);
-  row.spread_lpr_1y_mlf_1y = safeSubOrBlank_(row.lpr_1y, row.mlf_1y);
-  row.spread_lpr_5y_gov_5y = safeSubOrBlank_(row.lpr_5y, row.gov_5y);
-  row.spread_lpr_5y_ncd_1y = safeSubOrBlank_(row.lpr_5y, row.aaa_ncd_1y);
+  // 政策—市场联动
+  row.spread_dr007_omo_7d_bp = safeSpreadBpOrBlank_(row.dr007_weighted_rate, row.omo_7d);
+  row.spread_ncd_mlf_1y_bp = safeSpreadBpOrBlank_(row.aaa_ncd_1y, row.mlf_1y);
+  row.spread_gov_mlf_1y_bp = safeSpreadBpOrBlank_(row.gov_1y, row.mlf_1y);
+  row.spread_lpr_mlf_1y_bp = safeSpreadBpOrBlank_(row.lpr_1y, row.mlf_1y);
+  row.spread_lpr_gov_5y_bp = safeSpreadBpOrBlank_(row.lpr_5y, row.gov_5y);
+  row.spread_lpr5y_ncd1y_bp = safeSpreadBpOrBlank_(row.lpr_5y, row.aaa_ncd_1y);
 
-  // P6：房地产融资环境一期版
-  row.spread_lgfv_vs_high_grade_credit_1y = row.spread_aaa_lgfv_vs_aaa_credit_1y;
-  row.spread_bank_bond_vs_high_grade_credit_1y = row.spread_aaa_bank_vs_aaa_credit_1y;
-  row.spread_bank_bond_vs_high_grade_credit_3y = row.spread_aaa_bank_vs_aaa_credit_3y;
-  row.spread_bank_bond_vs_high_grade_credit_5y = row.spread_aaa_bank_vs_aaa_credit_5y;
-  row.spread_ncd_mlf_1y = row.spread_ncd_1y_mlf_1y;
-  row.spread_lpr5y_gov5y = row.spread_lpr_5y_gov_5y;
-
-  // P5：海外宏观一期版
-  row.cn_us_10y_spread = safeSubOrBlank_(row.gov_10y, row.ust_10y);
-  row.cn_us_2y_spread = safeSubOrBlank_(row.gov_2y, row.ust_2y);
+  // 海外宏观
+  row.spread_gov_ust_10y_bp = safeSpreadBpOrBlank_(row.gov_10y, row.ust_10y);
+  row.spread_gov_ust_2y_bp = safeSpreadBpOrBlank_(row.gov_2y, row.ust_2y);
   row.usd_broad_ma20 = '';
   row.usd_cny_ma20 = '';
   row.gold_ma20 = '';
-  row.ust_10y_pct250 = '';
-  row.usd_cny_pct250 = '';
+  row.ust_10y_prank250 = '';
+  row.usd_cny_prank250 = '';
 
   row.gov_10y_ma20 = '';
   row.gov_10y_ma60 = '';
   row.gov_10y_ma120 = '';
-  row.gov_10y_pct250 = '';
+  row.gov_10y_prank250 = '';
 
-  row.spread_cdb_gov_10y_ma20 = '';
-  row.spread_cdb_gov_10y_pct250 = '';
+  row.spread_cdb_gov_10y_bp_ma20 = '';
+  row.spread_cdb_gov_10y_bp_prank250 = '';
 
-  row.spread_aaa_credit_gov_5y_ma20 = '';
-  row.spread_aaa_credit_gov_5y_pct250 = '';
+  row.spread_aaa_credit_gov_5y_bp_ma20 = '';
+  row.spread_aaa_credit_gov_5y_bp_prank250 = '';
 
-  row.spread_aa_plus_vs_aaa_credit_1y_ma20 = '';
-  row.spread_aa_plus_vs_aaa_credit_1y_pct250 = '';
+  row.spread_aa_plus_credit_aaa_credit_1y_bp_ma20 = '';
+  row.spread_aa_plus_credit_aaa_credit_1y_bp_prank250 = '';
 
   row.aaa_ncd_1y_ma20 = '';
-  row.aaa_ncd_1y_pct250 = '';
+  row.aaa_ncd_1y_prank250 = '';
 
   return row;
 }
@@ -386,9 +413,9 @@ function applyRollingMetrics_(rows) {
     var r = rows[i];
 
     gov10Arr.push(toNumberOrNull_(r.gov_10y));
-    cdbGov10Arr.push(toNumberOrNull_(r.spread_cdb_gov_10y));
-    aaaCreditGov5Arr.push(toNumberOrNull_(r.spread_aaa_credit_gov_5y));
-    sink1Arr.push(toNumberOrNull_(r.spread_aa_plus_vs_aaa_credit_1y));
+    cdbGov10Arr.push(toNumberOrNull_(r.spread_cdb_gov_10y_bp));
+    aaaCreditGov5Arr.push(toNumberOrNull_(r.spread_aaa_credit_gov_5y_bp));
+    sink1Arr.push(toNumberOrNull_(r.spread_aa_plus_credit_aaa_credit_1y_bp));
     ncd1Arr.push(toNumberOrNull_(r.aaa_ncd_1y));
     usdBroadArr.push(toNumberOrNull_(r.usd_broad));
     usdCnyArr.push(toNumberOrNull_(r.usd_cny));
@@ -398,25 +425,25 @@ function applyRollingMetrics_(rows) {
     r.usd_broad_ma20 = rollingMeanAllowBlank_(usdBroadArr, 20);
     r.usd_cny_ma20 = rollingMeanAllowBlank_(usdCnyArr, 20);
     r.gold_ma20 = rollingMeanAllowBlank_(goldArr, 20);
-    r.ust_10y_pct250 = rollingPercentileRankAllowBlank_(ust10Arr, 250);
-    r.usd_cny_pct250 = rollingPercentileRankAllowBlank_(usdCnyArr, 250);
+    r.ust_10y_prank250 = rollingPercentileRankAllowBlank_(ust10Arr, 250);
+    r.usd_cny_prank250 = rollingPercentileRankAllowBlank_(usdCnyArr, 250);
 
     r.gov_10y_ma20 = rollingMeanAllowBlank_(gov10Arr, 20);
     r.gov_10y_ma60 = rollingMeanAllowBlank_(gov10Arr, 60);
     r.gov_10y_ma120 = rollingMeanAllowBlank_(gov10Arr, 120);
-    r.gov_10y_pct250 = rollingPercentileRankAllowBlank_(gov10Arr, 250);
+    r.gov_10y_prank250 = rollingPercentileRankAllowBlank_(gov10Arr, 250);
 
-    r.spread_cdb_gov_10y_ma20 = rollingMeanAllowBlank_(cdbGov10Arr, 20);
-    r.spread_cdb_gov_10y_pct250 = rollingPercentileRankAllowBlank_(cdbGov10Arr, 250);
+    r.spread_cdb_gov_10y_bp_ma20 = rollingMeanAllowBlank_(cdbGov10Arr, 20);
+    r.spread_cdb_gov_10y_bp_prank250 = rollingPercentileRankAllowBlank_(cdbGov10Arr, 250);
 
-    r.spread_aaa_credit_gov_5y_ma20 = rollingMeanAllowBlank_(aaaCreditGov5Arr, 20);
-    r.spread_aaa_credit_gov_5y_pct250 = rollingPercentileRankAllowBlank_(aaaCreditGov5Arr, 250);
+    r.spread_aaa_credit_gov_5y_bp_ma20 = rollingMeanAllowBlank_(aaaCreditGov5Arr, 20);
+    r.spread_aaa_credit_gov_5y_bp_prank250 = rollingPercentileRankAllowBlank_(aaaCreditGov5Arr, 250);
 
-    r.spread_aa_plus_vs_aaa_credit_1y_ma20 = rollingMeanAllowBlank_(sink1Arr, 20);
-    r.spread_aa_plus_vs_aaa_credit_1y_pct250 = rollingPercentileRankAllowBlank_(sink1Arr, 250);
+    r.spread_aa_plus_credit_aaa_credit_1y_bp_ma20 = rollingMeanAllowBlank_(sink1Arr, 20);
+    r.spread_aa_plus_credit_aaa_credit_1y_bp_prank250 = rollingPercentileRankAllowBlank_(sink1Arr, 250);
 
     r.aaa_ncd_1y_ma20 = rollingMeanAllowBlank_(ncd1Arr, 20);
-    r.aaa_ncd_1y_pct250 = rollingPercentileRankAllowBlank_(ncd1Arr, 250);
+    r.aaa_ncd_1y_prank250 = rollingPercentileRankAllowBlank_(ncd1Arr, 250);
   }
 }
 
@@ -605,12 +632,17 @@ function getCurvePoint_(bucket, curveName, colName, termIndex) {
   if (idx == null) return '';
 
   var n = toNumberOrNull_(row[idx]);
-  return isFiniteNumber_(n) ? n : '';
+  return isFiniteNumber_(n) ? n / 100 : '';
 }
 
 function pickMetricOrBlank_(v) {
   var n = toNumberOrNull_(v);
   return isFiniteNumber_(n) ? n : '';
+}
+
+function pctValueOrBlank_(v) {
+  var n = toNumberOrNull_(v);
+  return isFiniteNumber_(n) ? n / 100 : '';
 }
 
 function metricsRowToArray_(rowObj, header) {
@@ -624,24 +656,73 @@ function metricsRowToArray_(rowObj, header) {
 
 function writeMetricsOutput_(sheet, out) {
   sheet.clearContents();
-  sheet.clearFormats();
   sheet.getRange(1, 1, out.length, out[0].length).setValues(out);
 
   if (out.length > 1) {
-    sheet.getRange(2, 1, out.length - 1, 1).setNumberFormat('yyyy-mm-dd');
-    sheet.getRange(2, 2, out.length - 1, out[0].length - 1).setNumberFormat('0.0000');
+    var rowCount = out.length - 1;
+    var colCount = out[0].length;
+    var formatRow = [];
+    formatRow.push('yyyy-mm-dd');
+    for (var c = 2; c <= colCount; c++) {
+      formatRow.push(getMetricNumberFormat_(out[0][c - 1]));
+    }
+
+    var numberFormats = [];
+    for (var r = 0; r < rowCount; r++) {
+      numberFormats.push(formatRow.slice());
+    }
+    sheet.getRange(2, 1, rowCount, colCount).setNumberFormats(numberFormats);
   }
 
   sheet.setFrozenRows(1);
   sheet.getRange(1, 1, 1, out[0].length)
     .setFontWeight('bold')
     .setBackground('#d9eaf7');
-  sheet.autoResizeColumns(1, out[0].length);
 }
 
-function safeSubOrBlank_(a, b) {
+function getMetricNumberFormat_(headerName) {
+  var name = String(headerName || '');
+  var item = getMetricCatalogItem_(name);
+  if (item) {
+    if (item.display_unit === 'percent') {
+      return item.storage_unit === 'ratio' ? '0.0%' : '0.00%';
+    }
+    if (item.display_unit === 'bp') return '0.0 "bp"';
+  }
+  if (name === 'usd_cny' || name === 'usd_cny_ma20') return '0.0000';
+  if (name === 'usd_broad' || name === 'usd_broad_ma20' || name === 'gold' || name === 'gold_ma20' || name === 'wti' || name === 'brent' || name === 'copper' || name === 'vix' || name === 'spx' || name === 'nasdaq_100') return '0.00';
+  if (/_prank\d+$/.test(name)) return '0.0%';
+  if (/_bp$/.test(name) || /_bp_ma\d+$/.test(name)) return '0.0 "bp"';
+  return '0.00%';
+}
+
+function getDictionaryLatestValueNumberFormat_(code) {
+  var name = String(code || '');
+  var item = getMetricCatalogItem_(name);
+  if (item) {
+    if (item.display_unit === 'percent') return '0.00%';
+    if (item.display_unit === 'bp') return '0 "bp"';
+  }
+  if (/_prank\d+$/.test(name)) return '0.00%';
+  if (/_bp$/.test(name) || /_bp_ma\d+$/.test(name)) return '0 "bp"';
+  return '0.00';
+}
+
+function normalizeMeaningText_(text) {
+  var s = String(text || '').trim();
+  if (!s) return '';
+  s = s
+    .replace(/^通常意味着/, '')
+    .replace(/^常对应/, '')
+    .replace(/^表示/, '')
+    .replace(/^意味着/, '')
+    .replace(/[。；;，,\s]+$/, '');
+  return s;
+}
+
+function safeSpreadBpOrBlank_(a, b) {
   if (!isFiniteNumber_(a) || !isFiniteNumber_(b)) return '';
-  return a - b;
+  return (a - b) * 10000;
 }
 
 function rollingMeanAllowBlank_(arr, windowSize) {
@@ -682,4 +763,221 @@ function rebuildCurveHistory_() { buildMetrics_(); }
 function appendCurveHistoryRows_(rows) {
   if (!rows || !rows.length) return;
   buildMetrics_();
+}
+
+
+function buildMetricDictionarySheet_(ss, header, out) {
+  var sheetName = '指标说明';
+  var sheet = ss.getSheetByName(sheetName) || ss.insertSheet(sheetName);
+  var t0 = Date.now();
+  var statsMap = summarizeMetricColumnsOnce_(header, out);
+  Logger.log('buildMetricDictionarySheet_ | stats_built_ms=' + (Date.now() - t0) + ' | metric_count=' + Math.max(0, header.length - 1));
+
+  var rows = [];
+  rows.push([
+    'code',
+    '中文名称',
+    'English common name',
+    '分类',
+    '单位',
+    '重要性',
+    '历史起始',
+    '历史截止',
+    '可用样本数',
+    '缺失数',
+    '最新日期',
+    '最新值',
+    '偏高/上行解读',
+    '偏低/下行解读',
+    '主要用途',
+    '备注'
+  ]);
+
+  var latestValueFormats = [];
+  for (var c = 1; c < header.length; c++) {
+    var code = header[c];
+    var meta = getMetricMeta_(code);
+    var stats = statsMap[code] || emptyMetricStats_();
+    rows.push([
+      code,
+      meta.zh,
+      meta.en,
+      meta.category,
+      meta.unit,
+      meta.importance,
+      stats.startDate,
+      stats.endDate,
+      stats.count,
+      stats.missing,
+      stats.latestDate,
+      stats.latestValue,
+      meta.rise,
+      meta.fall,
+      meta.use,
+      meta.note
+    ]);
+    latestValueFormats.push([getDictionaryLatestValueNumberFormat_(code)]);
+  }
+
+  t0 = Date.now();
+  sheet.clearContents();
+  sheet.getRange(1, 1, rows.length, rows[0].length).setValues(rows);
+  sheet.setFrozenRows(1);
+  if (rows.length > 1) {
+    var rowCount = rows.length - 1;
+    sheet.getRange(2, 7, rowCount, 1).setNumberFormat('yyyy-mm-dd');
+    sheet.getRange(2, 8, rowCount, 1).setNumberFormat('yyyy-mm-dd');
+    sheet.getRange(2, 11, rowCount, 1).setNumberFormat('yyyy-mm-dd');
+    sheet.getRange(2, 12, rowCount, 1).setNumberFormats(latestValueFormats);
+  }
+  Logger.log('buildMetricDictionarySheet_ | sheet_written_ms=' + (Date.now() - t0));
+  Logger.log(sheetName + ' 已生成，共 ' + Math.max(0, rows.length - 1) + ' 条');
+}
+
+function summarizeMetricColumnsOnce_(header, out) {
+  var stats = {};
+  for (var c = 1; c < header.length; c++) {
+    stats[header[c]] = emptyMetricStats_();
+  }
+
+  for (var r = 1; r < out.length; r++) {
+    var row = out[r];
+    var dateValue = normYMD_(row[0]);
+    if (!dateValue) continue;
+
+    for (var c2 = 1; c2 < header.length; c2++) {
+      var code = header[c2];
+      var s = stats[code];
+      var value = row[c2];
+      var hasValue = value !== '' && value !== null && typeof value !== 'undefined';
+
+      if (hasValue) {
+        s.count++;
+        if (!s.startDate || dateValue < s.startDate) s.startDate = dateValue;
+        if (!s.endDate || dateValue > s.endDate) s.endDate = dateValue;
+        if (!s.latestDate || dateValue > s.latestDate) {
+          s.latestDate = dateValue;
+          s.latestValue = value;
+        }
+      } else {
+        s.missing++;
+      }
+    }
+  }
+
+  return stats;
+}
+
+function emptyMetricStats_() {
+  return {
+    startDate: '',
+    endDate: '',
+    count: 0,
+    missing: 0,
+    latestDate: '',
+    latestValue: ''
+  };
+}
+
+function getMetricCatalogCodes_() {
+  if (typeof METRIC_CATALOG_ === 'undefined' || !METRIC_CATALOG_ || !METRIC_CATALOG_.length) {
+    throw new Error('METRIC_CATALOG_ 未定义，请先加载 30_metric_catalog.js');
+  }
+  var codes = [];
+  for (var i = 0; i < METRIC_CATALOG_.length; i++) {
+    codes.push(METRIC_CATALOG_[i].code);
+  }
+  return codes;
+}
+
+function getMetricCatalogMap_() {
+  if (!getMetricCatalogMap_.cache_) {
+    var map = {};
+    if (typeof METRIC_CATALOG_ !== 'undefined' && METRIC_CATALOG_) {
+      for (var i = 0; i < METRIC_CATALOG_.length; i++) {
+        map[METRIC_CATALOG_[i].code] = METRIC_CATALOG_[i];
+      }
+    }
+    getMetricCatalogMap_.cache_ = map;
+  }
+  return getMetricCatalogMap_.cache_;
+}
+
+function getMetricCatalogItem_(code) {
+  return getMetricCatalogMap_()[String(code || '')] || null;
+}
+
+function getMetricMeta_(code) {
+  var exact = getMetricCatalogItem_(code);
+  if (exact) {
+    return {
+      zh: exact.zh || code,
+      en: exact.en || code,
+      category: exact.category || '其他',
+      unit: metricUnitLabelFromCatalogItem_(exact),
+      importance: exact.importance || '观察',
+      rise: normalizeMeaningText_(exact.rise || ''),
+      fall: normalizeMeaningText_(exact.fall || ''),
+      use: exact.usage || '',
+      note: exact.note || ''
+    };
+  }
+
+  var maMatch = code.match(/^(.*)_ma(\d+)$/);
+  if (maMatch) {
+    var baseMeta = getMetricMeta_(maMatch[1]);
+    return {
+      zh: baseMeta.zh + maMatch[2] + '日均线',
+      en: baseMeta.en + ' ' + maMatch[2] + '-day moving average',
+      category: baseMeta.category,
+      unit: baseMeta.unit,
+      importance: '观察',
+      rise: '趋势中枢上移',
+      fall: '趋势中枢下移',
+      use: '平滑短期噪音，观察趋势方向与拐点。',
+      note: '派生指标；基于基础序列滚动计算。'
+    };
+  }
+
+  var prankMatch = code.match(/^(.*)_prank(\d+)$/);
+  if (prankMatch) {
+    var baseMeta2 = getMetricMeta_(prankMatch[1]);
+    return {
+      zh: baseMeta2.zh + prankMatch[2] + '日历史分位',
+      en: baseMeta2.en + ' ' + prankMatch[2] + '-day percentile rank',
+      category: baseMeta2.category,
+      unit: '0-1（显示为%）',
+      importance: '观察',
+      rise: '处于近' + prankMatch[2] + '日相对高位',
+      fall: '处于近' + prankMatch[2] + '日相对低位',
+      use: '判断当前水平在历史滚动窗口中的相对位置。',
+      note: '派生指标；percentile rank，不是涨跌幅。'
+    };
+  }
+
+  return {
+    zh: code,
+    en: code,
+    category: '其他',
+    unit: inferUnitLabel_(code),
+    importance: '观察',
+    rise: '',
+    fall: '',
+    use: '',
+    note: '未单独维护元数据，请按字段名补充。'
+  };
+}
+
+function metricUnitLabelFromCatalogItem_(item) {
+  if (!item) return '';
+  if (item.display_unit === 'bp') return 'bp';
+  if (item.display_unit === 'percent') return '0-1（显示为%）';
+  return '原值';
+}
+
+function inferUnitLabel_(code) {
+  if (/_prank\d+$/.test(code)) return '0-1（显示为%）';
+  if (/_bp$/.test(code) || /_bp_ma\d+$/.test(code)) return 'bp';
+  if (code === 'usd_broad' || code === 'usd_cny' || code === 'gold' || code === 'wti' || code === 'brent' || code === 'copper' || code === 'vix' || code === 'spx' || code === 'nasdaq_100' || /^(usd_broad|usd_cny|gold|wti|brent|copper|vix|spx|nasdaq_100)_ma\d+$/.test(code)) return '原值';
+  return '0-1（显示为%）';
 }
