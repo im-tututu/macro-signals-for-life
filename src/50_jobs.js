@@ -4,99 +4,111 @@
  *
  * 原则：
  * - Apps Script 触发器只绑定这里的无参入口
+ * - job 命名优先体现调度时段与范围，而不是底层实现细节
  * - 具体抓取 / 写表逻辑继续留在 20-24 原始层
  * - 手工执行时也优先从这里选，便于区分“可直接运行的 job”和内部函数
  ********************/
 
 /**
- * 收盘后抓取中债收益率曲线。
+ * 夜间更新国内数据。
  *
  * 用法：
- * - 适合绑定工作日傍晚触发器
- * - 也可手工执行，用今天日期跑一轮曲线抓取
- *
- * 影响范围：
- * - 写入/更新：原始_收益率曲线
- */
-function jobCurveClose() {
-  runDailyWide_(today_());
-}
-
-/**
- * 日内抓取银行间质押式回购快照。
- *
- * 用法：
- * - 适合绑定每 30 分钟一次的触发器
- * - 接口若返回上一交易日，会自动按接口业务日期落表
- *
- * 影响范围：
- * - 写入/更新：原始_资金面
- */
-function jobMoneyMarketIntraday() {
-  fetchPledgedRepoRates_();
-}
-
-/**
- * 收盘后抓取国债期货近似收盘价。
- *
- * 用法：
- * - 适合绑定工作日傍晚触发器
- * - 当前抓取 T0 / TF0 连续合约价格快照
- *
- * 影响范围：
- * - 写入：原始_国债期货
- */
-function jobFuturesClose() {
-  fetchBondFutures_();
-}
-
-/**
- * 轮询央行政策利率公告并同步最新事件。
- *
- * 用法：
- * - 适合绑定 1~2 小时一次的触发器
- * - 也可在你刚修复 PBC 解析逻辑后手工跑一次验证
- *
- * 影响范围：
- * - 写入/更新：原始_政策利率
- */
-function jobPolicyWindowPoll() {
-  syncRawPolicyRateLatest();
-}
-
-/**
- * 夜间抓取海外宏观与民生/资产价格原始表。
- *
- * 用法：
- * - 适合绑定夜间触发器
- * - overseas macro 依赖 Script Properties 中的 API key
- * - life asset 当前为占位行，后续可继续扩展来源
- *
- * 影响范围：
- * - 写入/更新：原始_海外宏观、原始_民生与资产价格
- */
-function jobMacroNightly() {
-  fetchOverseasMacro_();
-  fetchLifeAsset_();
-}
-
-/**
- * 完整日更主任务。
- *
- * 用法：
- * - 适合绑定每日收盘后的总任务触发器
- * - 也适合你手工点一次，跑完整抓取 + 派生重建
+ * - 适合绑定每日夜间触发器
+ * - 统一处理国内日频数据抓取，并在最后重建派生层
  *
  * 流程：
- * 1) 曲线
- * 2) 资金面
+ * 1) 中债收益率曲线
+ * 2) 银行间资金面
  * 3) 国债期货
  * 4) 政策利率
- * 5) 海外宏观 / 民生资产
+ * 5) 民生 / 资产价格
  * 6) 指标、信号、复盘重建
+ *
+ * 影响范围：
+ * - 写入/更新：原始_收益率曲线、原始_资金面、原始_国债期货、原始_政策利率、原始_民生与资产价格
+ * - 重建：指标、信号、信号-复盘
  */
-function jobDailyClose() {
-  runEnhancedSystem();
+function jobNightlyCn() {
+  return runJobWithNotify_(
+    'jobNightlyCn',
+    function () {
+      var today = today_();
+
+      var r1 = runDailyWide_(today);
+      var r2 = fetchPledgedRepoRates_();
+      var r3 = fetchBondFutures_();
+      var r4 = syncRawPolicyRateLatest();
+      var r5 = fetchLifeAsset_ ? fetchLifeAsset_() : null;
+
+      rebuildAll_();
+
+      return {
+        message: 'nightly cn done',
+        detail: {
+          curve: r1 || null,
+          money_market: r2 || null,
+          futures: r3 || null,
+          policy_rate: r4 || null,
+          life_asset: r5 || null,
+          rebuild: 'done'
+        },
+        stats: mergeJobStats_([
+          extractStatsFromResult_(r1),
+          extractStatsFromResult_(r2),
+          extractStatsFromResult_(r3),
+          extractStatsFromResult_(r4),
+          extractStatsFromResult_(r5),
+          { updated_rows: 3 }
+        ])
+      };
+    },
+    'nightly cn done',
+    {
+      successNotifyMode: 'changed'
+    }
+  );
+}
+
+/**
+ * 早晨更新美国 / 海外数据。
+ *
+ * 用法：
+ * - 适合绑定每日早晨触发器
+ * - 主要用于补齐隔夜更新的美元、利率、黄金等海外宏观数据
+ *
+ * 流程：
+ * 1) 海外宏观
+ * 2) 指标、信号、复盘重建
+ *
+ * 影响范围：
+ * - 写入/更新：原始_海外宏观
+ * - 重建：指标、信号、信号-复盘
+ */
+function jobMorningUs() {
+  return runJobWithNotify_(
+    'jobMorningUs',
+    function () {
+      var r1 = fetchOverseasMacro_();
+
+      rebuildAll_();
+
+      return {
+        message: 'morning us done',
+        detail: {
+          overseas_macro: r1 || null,
+          rebuild: 'done'
+        },
+        stats: mergeJobStats_([
+          extractStatsFromResult_(r1),
+          { updated_rows: 3 }
+        ])
+      };
+    },
+    'morning us done',
+    {
+      successNotifyMode: 'changed'
+    }
+  );
 }
 
 /**
@@ -109,6 +121,6 @@ function jobDailyClose() {
  * 影响范围：
  * - 重建：指标、信号、信号-复盘
  */
-function jobRebuildOnly() {
+function jobManualRebuild() {
   rebuildAll_();
 }

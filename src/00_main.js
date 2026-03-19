@@ -12,7 +12,7 @@
  * 手工测试入口。
  */
 function test() {
-  runEnhancedSystem();
+  fetchBondFutures_();
 }
 
 /**
@@ -35,6 +35,28 @@ function runEnhancedSystem() {
   fetchLifeAsset_();
 
   rebuildAll_();
+
+  return {
+    message: 'daily close done',
+    detail: {
+      curve: r1 || null,
+      money_market: r2 || null,
+      futures: r3 || null,
+      policy_rate: r4 || null,
+      overseas_macro: r5 || null,
+      life_asset: r6 || null,
+      rebuild: 'done'
+    },
+    stats: mergeJobStats_([
+      extractStatsFromResult_(r1),
+      extractStatsFromResult_(r2),
+      extractStatsFromResult_(r3),
+      extractStatsFromResult_(r4),
+      extractStatsFromResult_(r5),
+      extractStatsFromResult_(r6),
+      { updated_rows: 3 } // metrics / signal / review 三张派生表，可按你需要改
+    ])
+  };  
 }
 
 /**
@@ -45,14 +67,14 @@ function rebuildAll_() {
   buildSignal_();
   SpreadsheetApp.flush();
   Utilities.sleep(500);
-  buildSignalReview_();
+  //buildSignalReview_();
 }
 
 function rebuildSignalAndReview_() {
   buildSignal_();
   SpreadsheetApp.flush();
   Utilities.sleep(500);
-  buildSignalReview_();
+  //buildSignalReview_();
 }
 
 /**

@@ -148,6 +148,25 @@ function fetchPledgedRepoRates_() {
       + " | DR007=" + dr007Weighted
       + " | DR014=" + dr014Weighted
   );
+
+  return {
+    message: 'money market sync done',
+    stats: {
+      inserted_rows: action === 'inserted' ? 1 : 0,
+      updated_rows: action === 'updated' ? 1 : 0,
+      skipped_rows: action === 'skipped' ? 1 : 0,
+      failed_rows: 0,
+      changed_points: 5,
+      source_date: ds
+    },
+    detail: {
+      action: action,
+      showDateCN: toStr_(data.showDateCN),
+      DR001: dr001Weighted,
+      DR007: dr007Weighted,
+      DR014: dr014Weighted
+    }
+  };  
 }
 
 /**

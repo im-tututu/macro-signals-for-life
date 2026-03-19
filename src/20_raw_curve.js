@@ -74,6 +74,23 @@ function runDailyWide_(date) {
   }
 
   Logger.log('yc_curve 新增=' + inserted + ' 跳过=' + skipped + ' 失败=' + failed);
+
+  return {
+    message: 'curve sync done',
+    stats: {
+      inserted_rows: inserted,
+      updated_rows: 0,
+      skipped_rows: skipped,
+      failed_rows: failed,
+      changed_points: inserted * TERMS.length,
+      source_date: date
+    },
+    detail: {
+      total_curves: CURVES.length,
+      batch_curves: batchCurves.length,
+      single_curves: singleCurves.length
+    }
+  };  
 }
 
 /**

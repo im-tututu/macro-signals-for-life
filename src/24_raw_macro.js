@@ -226,9 +226,19 @@ function fetchOverseasMacro_(forceRefresh) {
   );
 
   return {
-    skipped: false,
-    date: rowDate,
-    fetched_at: fetchedAt
+    message: 'overseas macro sync done',
+    stats: {
+      inserted_rows: 0,   // 如果你想更精确，可在 upsert 里返回 inserted/updated
+      updated_rows: 1,
+      skipped_rows: 0,
+      failed_rows: 0,
+      changed_points: row.length - 2,
+      source_date: rowDate
+    },
+    detail: {
+      row_date: rowDate,
+      fetched_at: fetchedAt
+    }
   };
 }
 

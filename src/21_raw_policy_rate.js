@@ -54,6 +54,20 @@ function syncRawPolicyRateLatest() {
 
   prSortRawPolicyRateSheet_(sheet);
   Logger.log("政策利率最新事件同步完成 inserted=" + inserted + ", updated=" + updated);
+
+  return {
+    message: 'policy rate sync done',
+    stats: {
+      inserted_rows: inserted,
+      updated_rows: updated,
+      skipped_rows: 0,
+      failed_rows: 0,
+      changed_points: inserted + updated
+    },
+    detail: {
+      event_count: events.length
+    }
+  };  
 }
 
 

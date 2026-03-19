@@ -9,21 +9,47 @@
 function fetchBondFutures_() {
   var ss = SpreadsheetApp.getActive();
   var sheet = ss.getSheetByName(SHEET_FUTURES_RAW) || ss.insertSheet(SHEET_FUTURES_RAW);
-
   ensureFuturesHeader_(sheet);
 
   var idx = buildDateIndex_(sheet, 0);
   var today = today_();
+
   if (idx.has(today)) {
     Logger.log("⏭ futures 已有今日(" + today + ")，跳过");
-    return;
+    return {
+      message: 'futures skip: already exists',
+      stats: {
+        inserted_rows: 0,
+        updated_rows: 0,
+        skipped_rows: 1,
+        failed_rows: 0,
+        changed_points: 0,
+        source_date: today
+      }
+    };
   }
 
-  var t0 = fetchSinaFuturePrice_("T0");
-  var tf0 = fetchSinaFuturePrice_("TF0");
+  var t0 = fetchSinaPrice_("T0");
+  var tf0 = fetchSinaPrice_("TF0");
 
   sheet.appendRow([today, t0, tf0, "hq.sinajs.cn", new Date()]);
   Logger.log("FUT T0=" + t0 + " TF0=" + tf0);
+
+  return {
+    message: 'futures sync done',
+    stats: {
+      inserted_rows: 1,
+      updated_rows: 0,
+      skipped_rows: 0,
+      failed_rows: 0,
+      changed_points: 2,
+      source_date: today
+    },
+    detail: {
+      T0: t0,
+      TF0: tf0
+    }
+  };
 }
 
 function ensureFuturesHeader_(sheet) {

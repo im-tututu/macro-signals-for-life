@@ -4,16 +4,12 @@
  *
  * 用法：
  * - 手工执行 rebuildProjectTriggers() 可按当前注册表重建全部定时器
- * - 修改 job 频率后，重新执行一次即可同步
+ * - 修改 job 时间后，重新执行一次即可同步
  ********************/
 
 var JOB_TRIGGER_REGISTRY = [
-  { fn: 'jobMoneyMarketIntraday', everyMinutes: 30 },
-  { fn: 'jobPolicyWindowPoll', everyHours: 2 },
-  { fn: 'jobCurveClose', atHour: 18 },
-  { fn: 'jobFuturesClose', atHour: 18 },
-  { fn: 'jobMacroNightly', atHour: 22 },
-  { fn: 'jobDailyClose', atHour: 23 }
+  { fn: 'jobNightlyCn', atHour: 22 },
+  { fn: 'jobMorningUs', atHour: 7 }
 ];
 
 /**
@@ -24,6 +20,7 @@ function rebuildProjectTriggers() {
 
   JOB_TRIGGER_REGISTRY.forEach(function(job) {
     var builder = ScriptApp.newTrigger(job.fn).timeBased();
+
     if (job.everyMinutes) {
       builder.everyMinutes(job.everyMinutes);
     } else if (job.everyHours) {
@@ -33,6 +30,7 @@ function rebuildProjectTriggers() {
     } else {
       throw new Error('unknown trigger config: ' + JSON.stringify(job));
     }
+
     builder.create();
   });
 
