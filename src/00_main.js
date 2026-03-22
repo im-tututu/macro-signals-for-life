@@ -12,7 +12,8 @@
  * 手工测试入口。
  */
 function test() {
-  buildMetricDictionary_();
+  //backfill("2026-03-18","2026-03-19");
+  buildMetricsFull_();
 }
 
 /**
