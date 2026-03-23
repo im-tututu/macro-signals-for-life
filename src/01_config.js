@@ -16,6 +16,11 @@ var SHEET_MACRO_RAW = '原始_海外宏观';
 var SHEET_OVERSEAS_MACRO_RAW = SHEET_MACRO_RAW;
 var SHEET_LIFE_ASSET_RAW = '原始_民生与资产价格';
 
+var SHEET_ETF_INDEX_RAW = '原始_指数ETF';
+var SHEET_BOND_INDEX_LIST = '配置_债券指数清单';
+var SHEET_JISILU_BOND_INDEX_CANDIDATE = '映射_Jisilu债券指数候选';
+var SHEET_BOND_INDEX_RAW = '原始_债券指数特征';
+
 /** 汇总指标与信号表 */
 var SHEET_METRICS = '指标';
 var SHEET_SIGNAL = '信号';

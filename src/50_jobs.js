@@ -130,6 +130,74 @@ function jobMorningUs() {
   );
 }
 
+
+
+/**
+ * 夜间更新指数 ETF 快照。
+ *
+ * 用法：
+ * - 推荐单独绑定在收盘后 / 晚间触发
+ * - 依赖：
+ *   1) 16_source_jisilu.js
+ *   2) 25_raw_etf_index.js
+ *   3) Script Properties 中已有 JISILU_COOKIE
+ *   4) 若要自动续 Cookie，还需 JISILU_REFRESH_URL / JISILU_REFRESH_TOKEN
+ */
+function jobNightlyEtfIndex() {
+  return runJobWithNotify_(
+    'jobNightlyEtfIndex',
+    function () {
+      var r1 = runJobStepWithLog_('指数ETF快照', function () {
+        return syncRawEtfIndexLatest({
+          minUnitTotalYi: 2,
+          minVolumeWan: '',
+          rowsPerPage: 500,
+          maxPages: 20
+        });
+      });
+
+      return {
+        message: 'nightly etf index done',
+        detail: {
+          etf_index: r1 || null
+        },
+        stats: mergeJobStats_([
+          extractStatsFromResult_(r1)
+        ])
+      };
+    },
+    'nightly etf index done',
+    { successNotifyMode: 'changed' }
+  );
+}
+
+
+
+
+
+
+function jobBondIndexOnly() {
+  return runJobWithNotify_(
+    'jobBondIndexOnly',
+    function () {
+      var r1 = runJobStepWithLog_('债券指数特征', function () {
+        return syncRawBondIndexFeatures_();
+      });
+      return {
+        message: 'bond index only done',
+        detail: { bond_index: r1 || null },
+        stats: mergeJobStats_([extractStatsFromResult_(r1)])
+      };
+    },
+    'bond index only done',
+    { successNotifyMode: 'changed' }
+  );
+}
+
+
+
+
+
 /**
  * 只重建派生层，不抓取任何外部源。
  *
