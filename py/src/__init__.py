@@ -1,1 +1,1 @@
-"""Python source-layer package for macro-signals-for-life."""
+"""Macro Signals for Life Python package."""

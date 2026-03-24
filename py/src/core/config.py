@@ -1,83 +1,254 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List
+from typing import Final
 
-from dotenv import load_dotenv
-
-from .models import CurveSpec
-
-BASE_DIR = Path(__file__).resolve().parents[2]
-ENV_CANDIDATES = [
-    Path.cwd() / ".env",
-    BASE_DIR / ".env",
-    BASE_DIR.parent / ".env",
-]
-for env_path in ENV_CANDIDATES:
-    if env_path.exists():
-        load_dotenv(env_path, override=True)
-
-TERMS: List[float] = [
-    0, 0.08, 0.17, 0.25, 0.5, 0.75, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 30, 40, 50,
-]
-
-CURVES: List[CurveSpec] = [
-    CurveSpec(name="国债", id="2c9081e50a2f9606010a3068cae70001", tier="main", aliases=["国债收益率曲线", "Government Bond"]),
-    CurveSpec(name="国开债", id="8a8b2ca037a7ca910137bfaa94fa5057", tier="main", aliases=["国开债收益率曲线", "政策性金融债", "Policy Bank"]),
-    CurveSpec(name="AAA信用", id="2c9081e50a2f9606010a309f4af50111", tier="main", aliases=["企业债收益率曲线(AAA)", "企业债AAA", "Enterprise Bond AAA"]),
-    CurveSpec(name="AA+信用", id="2c908188138b62cd01139a2ee6b51e25", tier="main", aliases=["企业债收益率曲线(AA+)", "企业债收益率曲线(AA＋)", "企业债AA+", "Enterprise Bond AA+"]),
-    CurveSpec(name="AAA+中票", id="2c9081e9257ddf2a012590efdded1d35", tier="main", aliases=["中短期票据收益率曲线(AAA+)", "中票AAA+", "CP&Note AAA+"]),
-    CurveSpec(name="AAA中票", id="2c9081880fa9d507010fb8505b393fe7", tier="main", aliases=["中短期票据收益率曲线(AAA)", "中票AAA", "CP&Note AAA"]),
-    CurveSpec(name="AAA存单", id="8308218D1D030E0DE0540010E03EE6DA", tier="main", aliases=["同业存单收益率曲线(AAA)", "存单AAA", "NCD AAA", "Negotiable CD AAA"]),
-    CurveSpec(name="AAA城投", id="2c9081e91b55cc84011be3c53b710598", tier="extended", aliases=["城投债收益率曲线(AAA)", "城投AAA", "LGFV AAA"]),
-    CurveSpec(name="AAA银行债", id="2c9081e9259b766a0125be8b5115149f", tier="extended", aliases=["商业银行普通债收益率曲线(AAA)", "商业银行债收益率曲线(AAA)", "银行债AAA", "Financial Bond of Commercial Bank AAA"]),
-    CurveSpec(name="地方债", id="998183ff8c00f640018c32d4721a0d16", tier="short_history", fetch_separately=True, aliases=["地方政府债收益率曲线", "地方政府债", "Local Government"]),
+# -----------------------------
+# Paths
+# -----------------------------
+# py/src/core/config.py -> parents:
+# 0 core, 1 src, 2 py, 3 repo root
+PY_ROOT: Final[Path] = Path(__file__).resolve().parents[2]
+REPO_ROOT: Final[Path] = Path(__file__).resolve().parents[3]
+SRC_ROOT: Final[Path] = PY_ROOT / "src"
+DATA_DIR: Final[Path] = PY_ROOT / "data"
+SQL_DIR: Final[Path] = PY_ROOT / "sql"
+SCRIPT_DIR: Final[Path] = PY_ROOT / "scripts"
+TEST_DIR: Final[Path] = PY_ROOT / "tests"
+LOG_DIR: Final[Path] = DATA_DIR / "logs"
+EXPORT_DIR: Final[Path] = DATA_DIR / "exports"
+SNAPSHOT_DIR: Final[Path] = DATA_DIR / "snapshots"
+IMPORT_DIR: Final[Path] = DATA_DIR / "imports"
+DEFAULT_DB_PATH: Final[Path] = DATA_DIR / "db.sqlite"
+DEFAULT_INIT_SQL_PATH: Final[Path] = SQL_DIR / "0001_init.sql"
+DEFAULT_WORKBOOK_NAME: Final[str] = "宏观观察.xlsx"
+WORKBOOK_CANDIDATES: Final[list[Path]] = [
+    REPO_ROOT / DEFAULT_WORKBOOK_NAME,
+    PY_ROOT / DEFAULT_WORKBOOK_NAME,
+    IMPORT_DIR / DEFAULT_WORKBOOK_NAME,
 ]
 
-OVERSEAS_MACRO_FRED_SERIES: Dict[str, str] = {
-    "fed_upper": "DFEDTARU",
-    "fed_lower": "DFEDTARL",
-    "sofr": "SOFR",
-    "ust_2y": "DGS2",
-    "ust_10y": "DGS10",
-    "us_real_10y": "DFII10",
-    "usd_broad": "DTWEXBGS",
-    "usd_cny": "DEXCHUS",
-    "vix": "VIXCLS",
-    "spx": "SP500",
-    "nasdaq_100": "NASDAQ100",
+# -----------------------------
+# Environment variable names
+# -----------------------------
+ENV_DB_PATH: Final[str] = "MSFL_DB_PATH"
+ENV_INIT_SQL_PATH: Final[str] = "MSFL_INIT_SQL_PATH"
+ENV_WORKBOOK_PATH: Final[str] = "MSFL_WORKBOOK_PATH"
+ENV_GSHEET_SPREADSHEET_ID: Final[str] = "MSFL_GSHEET_SPREADSHEET_ID"
+ENV_LOG_LEVEL: Final[str] = "MSFL_LOG_LEVEL"
+ENV_BARK_URL: Final[str] = "MSFL_BARK_URL"
+ENV_BARK_GROUP: Final[str] = "MSFL_BARK_GROUP"
+ENV_BARK_DEVICE_KEY: Final[str] = "MSFL_BARK_DEVICE_KEY"
+
+# -----------------------------
+# Sheet names (keep aligned with current GAS workbook)
+# -----------------------------
+SHEET_RUN_LOG: Final[str] = "运行日志"
+SHEET_BOND_CURVE_RAW: Final[str] = "原始_收益率曲线"
+SHEET_OVERSEAS_MACRO_RAW: Final[str] = "原始_海外宏观"
+SHEET_POLICY_RATE_RAW: Final[str] = "原始_政策利率"
+SHEET_MONEY_MARKET_RAW: Final[str] = "原始_资金面"
+SHEET_MONEY_MARKET_LEGACY: Final[str] = "原始_货币"
+SHEET_FUTURES_RAW: Final[str] = "原始_国债期货"
+SHEET_LIFE_ASSET_RAW: Final[str] = "原始_民生与资产价格"
+SHEET_JISILU_ETF_RAW: Final[str] = "原始_指数ETF"
+SHEET_BOND_INDEX_RAW: Final[str] = "原始_债券指数特征"
+SHEET_BOND_INDEX_LIST: Final[str] = "配置_债券指数清单"
+SHEET_JISILU_BOND_INDEX_CANDIDATE: Final[str] = "映射_Jisilu债券指数候选"
+SHEET_METRICS: Final[str] = "指标"
+SHEET_METRIC_DICTIONARY: Final[str] = "指标说明"
+SHEET_SIGNAL_MAIN: Final[str] = "信号-主要"
+SHEET_SIGNAL_DETAIL: Final[str] = "信号-明细"
+SHEET_SIGNAL_REVIEW: Final[str] = "信号-复盘"
+
+RAW_SHEET_NAMES: Final[list[str]] = [
+    SHEET_RUN_LOG,
+    SHEET_BOND_CURVE_RAW,
+    SHEET_OVERSEAS_MACRO_RAW,
+    SHEET_POLICY_RATE_RAW,
+    SHEET_MONEY_MARKET_RAW,
+    SHEET_MONEY_MARKET_LEGACY,
+    SHEET_FUTURES_RAW,
+    SHEET_LIFE_ASSET_RAW,
+    SHEET_JISILU_ETF_RAW,
+    SHEET_BOND_INDEX_RAW,
+    SHEET_BOND_INDEX_LIST,
+    SHEET_JISILU_BOND_INDEX_CANDIDATE,
+]
+
+# -----------------------------
+# Table names
+# -----------------------------
+TABLE_INGEST_RUN: Final[str] = "ingest_run"
+TABLE_INGEST_ERROR: Final[str] = "ingest_error"
+TABLE_RUN_LOG: Final[str] = "run_log"
+TABLE_CFG_BOND_INDEX_LIST: Final[str] = "cfg_bond_index_list"
+TABLE_MAP_JISILU_BOND_INDEX_CANDIDATE: Final[str] = "map_jisilu_bond_index_candidate"
+TABLE_RAW_BOND_CURVE: Final[str] = "raw_bond_curve"
+TABLE_RAW_OVERSEAS_MACRO: Final[str] = "raw_overseas_macro"
+TABLE_RAW_POLICY_RATE: Final[str] = "raw_policy_rate"
+TABLE_RAW_MONEY_MARKET: Final[str] = "raw_money_market"
+TABLE_RAW_FUTURES: Final[str] = "raw_futures"
+TABLE_RAW_LIFE_ASSET: Final[str] = "raw_life_asset"
+TABLE_RAW_JISILU_ETF: Final[str] = "raw_jisilu_etf"
+TABLE_RAW_BOND_INDEX: Final[str] = "raw_bond_index"
+TABLE_METRICS: Final[str] = "metrics"
+TABLE_SIGNAL_MAIN: Final[str] = "signal_main"
+TABLE_SIGNAL_DETAIL: Final[str] = "signal_detail"
+TABLE_SIGNAL_REVIEW: Final[str] = "signal_review"
+
+RAW_TABLES: Final[list[str]] = [
+    TABLE_RUN_LOG,
+    TABLE_CFG_BOND_INDEX_LIST,
+    TABLE_MAP_JISILU_BOND_INDEX_CANDIDATE,
+    TABLE_RAW_BOND_CURVE,
+    TABLE_RAW_OVERSEAS_MACRO,
+    TABLE_RAW_POLICY_RATE,
+    TABLE_RAW_MONEY_MARKET,
+    TABLE_RAW_FUTURES,
+    TABLE_RAW_LIFE_ASSET,
+    TABLE_RAW_JISILU_ETF,
+    TABLE_RAW_BOND_INDEX,
+]
+
+# -----------------------------
+# Bond curve terms / columns
+# -----------------------------
+CURVE_TERMS: Final[list[str]] = [
+    "0",
+    "0.08",
+    "0.17",
+    "0.25",
+    "0.5",
+    "0.75",
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9",
+    "10",
+    "15",
+    "20",
+    "30",
+    "40",
+    "50",
+]
+CURVE_VALUE_COLUMNS: Final[list[str]] = [
+    "y_0",
+    "y_0_08",
+    "y_0_17",
+    "y_0_25",
+    "y_0_5",
+    "y_0_75",
+    "y_1",
+    "y_2",
+    "y_3",
+    "y_4",
+    "y_5",
+    "y_6",
+    "y_7",
+    "y_8",
+    "y_9",
+    "y_10",
+    "y_15",
+    "y_20",
+    "y_30",
+    "y_40",
+    "y_50",
+]
+
+# -----------------------------
+# Import-time sheet/header quirks
+# -----------------------------
+HEADER_SCAN_MAX_ROWS: Final[int] = 10
+BOND_INDEX_LIST_HEADER_MIN_HITS: Final[int] = 4
+LEGACY_SHEET_ALLOWANCES: Final[dict[str, list[str]]] = {
+    SHEET_POLICY_RATE_RAW: ["extra_1", "extra_2"],
+    SHEET_LIFE_ASSET_RAW: ["deposit_1y_dup", "source_dup", "fetched_at_dup"],
 }
 
-OVERSEAS_MACRO_ALPHA_SERIES: Dict[str, Dict[str, str]] = {
-    "gold": {"fn": "GOLD_SILVER_HISTORY", "symbol": "GOLD", "interval": "daily"},
-    "wti": {"fn": "WTI", "interval": "daily"},
-    "brent": {"fn": "BRENT", "interval": "daily"},
-    "copper": {"fn": "COPPER", "interval": "monthly"},
-}
+
+@dataclass(frozen=True)
+class AppConfig:
+    db_path: Path
+    init_sql_path: Path
+    workbook_path: Path | None
+    spreadsheet_id: str | None = None
+    log_level: str = "INFO"
+    bark_url: str | None = None
+    bark_group: str | None = None
+    bark_device_key: str | None = None
+
+    @classmethod
+    def load(cls) -> "AppConfig":
+        db_path = _env_path(ENV_DB_PATH) or DEFAULT_DB_PATH
+        init_sql_path = _env_path(ENV_INIT_SQL_PATH) or DEFAULT_INIT_SQL_PATH
+        workbook_path = _env_path(ENV_WORKBOOK_PATH) or find_default_workbook()
+        spreadsheet_id = _env_text(ENV_GSHEET_SPREADSHEET_ID)
+        log_level = (_env_text(ENV_LOG_LEVEL) or "INFO").upper()
+        bark_url = _env_text(ENV_BARK_URL)
+        bark_group = _env_text(ENV_BARK_GROUP)
+        bark_device_key = _env_text(ENV_BARK_DEVICE_KEY)
+        return cls(
+            db_path=db_path,
+            init_sql_path=init_sql_path,
+            workbook_path=workbook_path,
+            spreadsheet_id=spreadsheet_id,
+            log_level=log_level,
+            bark_url=bark_url,
+            bark_group=bark_group,
+            bark_device_key=bark_device_key,
+        )
 
 
-@dataclass(slots=True)
-class Settings:
-    fred_api_key: str = field(default_factory=lambda: os.getenv("FRED_API_KEY", ""))
-    alpha_vantage_api_key: str = field(default_factory=lambda: os.getenv("ALPHA_VANTAGE_API_KEY", ""))
-    clasprc_json: str = field(default_factory=lambda: os.getenv("CLASPRC_JSON", ""))
-    gas_script_id: str = field(default_factory=lambda: os.getenv("GAS_SCRIPT_ID", ""))
-    google_application_credentials: str = field(default_factory=lambda: os.getenv("GOOGLE_APPLICATION_CREDENTIALS", ""))
-    google_service_account_json: str = field(default_factory=lambda: os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", ""))
-    google_sheet_id: str = field(default_factory=lambda: os.getenv("GOOGLE_SHEET_ID", ""))
-    sqlite_path: str = field(default_factory=lambda: os.getenv("SQLITE_PATH", "./data/macro_signals.db"))
-    bark_device_key: str = field(default_factory=lambda: os.getenv("BARK_DEVICE_KEY", ""))
-    jisilu_cookie: str = field(default_factory=lambda: os.getenv("JISILU_COOKIE", ""))
-    jisilu_user_agent: str = field(default_factory=lambda: os.getenv(
-        "JISILU_USER_AGENT",
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
-    ))
-    http_timeout_seconds: float = field(default_factory=lambda: float(os.getenv("HTTP_TIMEOUT_SECONDS", "30")))
-    http_retry_count: int = field(default_factory=lambda: int(os.getenv("HTTP_RETRY_COUNT", "3")))
-    http_retry_sleep_seconds: float = field(default_factory=lambda: float(os.getenv("HTTP_RETRY_SLEEP_SECONDS", "1.2")))
-    tz: str = field(default_factory=lambda: os.getenv("TZ", "Asia/Shanghai"))
+def _env_text(name: str) -> str | None:
+    value = os.getenv(name, "").strip()
+    return value or None
 
 
-settings = Settings()
+def _env_path(name: str) -> Path | None:
+    value = _env_text(name)
+    if not value:
+        return None
+    return Path(value).expanduser().resolve()
+
+
+def find_default_workbook() -> Path | None:
+    for path in WORKBOOK_CANDIDATES:
+        if path.exists():
+            return path.resolve()
+    return None
+
+
+def ensure_runtime_dirs() -> None:
+    for path in [DATA_DIR, LOG_DIR, EXPORT_DIR, SNAPSHOT_DIR, IMPORT_DIR, SQL_DIR]:
+        path.mkdir(parents=True, exist_ok=True)
+
+
+def default_sql_paths() -> list[Path]:
+    paths = sorted(SQL_DIR.glob("000*.sql"))
+    if not paths and DEFAULT_INIT_SQL_PATH.exists():
+        paths = [DEFAULT_INIT_SQL_PATH]
+    return paths
+
+
+def as_dict(config: AppConfig | None = None) -> dict[str, str | None]:
+    cfg = config or AppConfig.load()
+    return {
+        "repo_root": str(REPO_ROOT),
+        "py_root": str(PY_ROOT),
+        "data_dir": str(DATA_DIR),
+        "db_path": str(cfg.db_path),
+        "init_sql_path": str(cfg.init_sql_path),
+        "workbook_path": str(cfg.workbook_path) if cfg.workbook_path else None,
+        "spreadsheet_id": cfg.spreadsheet_id,
+        "log_level": cfg.log_level,
+        "bark_url": cfg.bark_url,
+        "bark_group": cfg.bark_group,
+    }

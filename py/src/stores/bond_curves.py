@@ -1,111 +1,55 @@
 from __future__ import annotations
 
-import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
+
+from src.core.config import CURVE_VALUE_COLUMNS, TABLE_RAW_BOND_CURVE
+from .base import BaseSqliteStore, TableSpec
 
 
-@dataclass(frozen=True)
-class BondCurveStore:
-    db_path: Path
+BOND_CURVE_SPEC = TableSpec(
+    table_name=TABLE_RAW_BOND_CURVE,
+    key_fields=("date", "curve"),
+    date_field="date",
+    numeric_fields=tuple(CURVE_VALUE_COLUMNS),
+    integer_fields=("source_row_num",),
+    text_fields=("curve", "source_sheet"),
+    datetime_fields=("migrated_at",),
+    compare_fields=("date", "curve", *CURVE_VALUE_COLUMNS, "source_sheet", "source_row_num", "migrated_at"),
+    default_order_by=("date", "curve"),
+)
 
-    def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(str(self.db_path))
-        conn.row_factory = sqlite3.Row
-        return conn
 
-    def fetch_latest_date(self, curve: Optional[str] = None) -> Optional[str]:
-        sql = "SELECT MAX(date) AS latest_date FROM raw_bond_curve"
-        params: list[Any] = []
-        if curve:
-            sql += " WHERE curve = ?"
-            params.append(curve)
+@dataclass
+class BondCurveStore(BaseSqliteStore):
+    spec: TableSpec = BOND_CURVE_SPEC
 
-        with self._connect() as conn:
-            row = conn.execute(sql, params).fetchone()
-            return None if row is None else row["latest_date"]
+    def __init__(self, db_path: Path | None = None, *, auto_init: bool = True) -> None:
+        super().__init__(db_path=db_path, auto_init=auto_init)
 
-    def fetch_between(
-        self,
-        start_date: str,
-        end_date: str,
-        curve: Optional[str] = None,
-    ) -> list[dict[str, Any]]:
-        sql = """
-            SELECT *
-            FROM raw_bond_curve
-            WHERE date >= ? AND date <= ?
-        """
-        params: list[Any] = [start_date, end_date]
-        if curve:
-            sql += " AND curve = ?"
-            params.append(curve)
-        sql += " ORDER BY date ASC, curve ASC"
-
-        with self._connect() as conn:
-            rows = conn.execute(sql, params).fetchall()
-            return [dict(row) for row in rows]
-
-    def fetch_recent(
-        self,
-        curve: Optional[str] = None,
-        limit: int = 250,
-    ) -> list[dict[str, Any]]:
-        sql = "SELECT * FROM raw_bond_curve"
-        params: list[Any] = []
-        if curve:
-            sql += " WHERE curve = ?"
-            params.append(curve)
-        sql += " ORDER BY date DESC LIMIT ?"
-        params.append(limit)
-
-        with self._connect() as conn:
-            rows = conn.execute(sql, params).fetchall()
-            return [dict(row) for row in rows]
-
-    def fetch_curve_window(
-        self,
-        curve: str,
-        limit: int = 250,
-    ) -> list[dict[str, Any]]:
+    def fetch_curve_window(self, curve: str, limit: int = 250) -> list[dict[str, Any]]:
         return self.fetch_recent(curve=curve, limit=limit)
 
-    def fetch_curve_points(
-        self,
-        curve: str,
-        tenor_col: str,
-        limit: int = 250,
-    ) -> list[dict[str, Any]]:
-        allowed_cols = self._get_tenor_columns()
-        if tenor_col not in allowed_cols:
-            raise ValueError(f"Invalid tenor column: {tenor_col}")
-
+    def fetch_curve_points(self, curve: str, tenor_col: str, limit: int = 250) -> list[dict[str, Any]]:
+        self._require_tenor(tenor_col)
         sql = f"""
             SELECT date, curve, {tenor_col} AS value
-            FROM raw_bond_curve
-            WHERE curve = ?
-            ORDER BY date DESC
-            LIMIT ?
+              FROM {self.spec.table_name}
+             WHERE curve = ?
+          ORDER BY date DESC
+             LIMIT ?
         """
-
         with self._connect() as conn:
             rows = conn.execute(sql, (curve, limit)).fetchall()
             return [dict(row) for row in rows]
 
-    def fetch_latest_curve_row(self, curve: str) -> Optional[dict[str, Any]]:
-        sql = """
-            SELECT *
-            FROM raw_bond_curve
-            WHERE curve = ?
-            ORDER BY date DESC
-            LIMIT 1
-        """
-        with self._connect() as conn:
-            row = conn.execute(sql, (curve,)).fetchone()
-            return None if row is None else dict(row)
+    def fetch_latest_curve_row(self, curve: str) -> dict[str, Any] | None:
+        rows = self.fetch_recent(curve=curve, limit=1)
+        return rows[0] if rows else None
 
-    def fetch_latest_curve_value(self, curve: str, tenor_col: str) -> Optional[float]:
+    def fetch_latest_curve_value(self, curve: str, tenor_col: str) -> float | None:
+        self._require_tenor(tenor_col)
         row = self.fetch_latest_curve_row(curve)
         if row is None:
             return None
@@ -119,45 +63,52 @@ class BondCurveStore:
         short_tenor_col: str,
         limit: int = 250,
     ) -> list[dict[str, Any]]:
-        allowed_cols = self._get_tenor_columns()
-        for col in (long_tenor_col, short_tenor_col):
-            if col not in allowed_cols:
-                raise ValueError(f"Invalid tenor column: {col}")
-
+        self._require_tenor(long_tenor_col)
+        self._require_tenor(short_tenor_col)
         sql = f"""
-            SELECT
-                date,
-                curve,
-                {long_tenor_col} AS long_value,
-                {short_tenor_col} AS short_value,
-                ({long_tenor_col} - {short_tenor_col}) AS spread
-            FROM raw_bond_curve
-            WHERE curve = ?
-            ORDER BY date DESC
-            LIMIT ?
+            SELECT date,
+                   curve,
+                   {long_tenor_col} AS long_value,
+                   {short_tenor_col} AS short_value,
+                   ({long_tenor_col} - {short_tenor_col}) AS spread
+              FROM {self.spec.table_name}
+             WHERE curve = ?
+          ORDER BY date DESC
+             LIMIT ?
         """
         with self._connect() as conn:
             rows = conn.execute(sql, (curve, limit)).fetchall()
             return [dict(row) for row in rows]
 
     def list_curves(self) -> list[str]:
-        sql = "SELECT DISTINCT curve FROM raw_bond_curve WHERE curve IS NOT NULL ORDER BY curve ASC"
+        sql = f"SELECT DISTINCT curve FROM {self.spec.table_name} WHERE curve IS NOT NULL ORDER BY curve ASC"
         with self._connect() as conn:
             rows = conn.execute(sql).fetchall()
             return [str(row[0]) for row in rows]
 
-    def count_rows(self, curve: Optional[str] = None) -> int:
-        sql = "SELECT COUNT(*) FROM raw_bond_curve"
-        params: list[Any] = []
-        if curve:
-            sql += " WHERE curve = ?"
-            params.append(curve)
-        with self._connect() as conn:
-            row = conn.execute(sql, params).fetchone()
-            return 0 if row is None else int(row[0])
+    def upsert_curve_map(
+        self,
+        *,
+        date: str,
+        curve: str,
+        points: dict[str, Any],
+        source_sheet: str | None = None,
+        source_row_num: int | None = None,
+        migrated_at: str | None = None,
+    ) -> dict[str, Any]:
+        row: dict[str, Any] = {
+            "date": date,
+            "curve": curve,
+            "source_sheet": source_sheet,
+            "source_row_num": source_row_num,
+            "migrated_at": migrated_at,
+        }
+        for tenor_col in CURVE_VALUE_COLUMNS:
+            if tenor_col in points:
+                row[tenor_col] = points[tenor_col]
+        return row
 
-    def _get_tenor_columns(self) -> set[str]:
-        with self._connect() as conn:
-            rows = conn.execute("PRAGMA table_info(raw_bond_curve)").fetchall()
-        cols = {str(row[1]) for row in rows}
-        return {col for col in cols if col.startswith("y_")}
+    @staticmethod
+    def _require_tenor(tenor_col: str) -> None:
+        if tenor_col not in CURVE_VALUE_COLUMNS:
+            raise ValueError(f"invalid tenor column: {tenor_col}")

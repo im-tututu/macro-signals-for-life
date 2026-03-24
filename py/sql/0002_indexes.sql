@@ -1,10 +1,21 @@
--- Extra indexes placeholder
-
-CREATE INDEX IF NOT EXISTS idx_raw_bond_curves_curve_code
-ON raw_bond_curves (curve_code);
-
-CREATE INDEX IF NOT EXISTS idx_metrics_metric_key
-ON metrics (metric_key);
-
-CREATE INDEX IF NOT EXISTS idx_signals_signal_key
-ON signals (signal_key);
+BEGIN;
+CREATE INDEX IF NOT EXISTS idx_run_log_job_ts ON run_log(job_name, timestamp);
+CREATE INDEX IF NOT EXISTS idx_cfg_bond_index_list_code ON cfg_bond_index_list(index_code);
+CREATE INDEX IF NOT EXISTS idx_raw_bond_curve_date ON raw_bond_curve(date);
+CREATE INDEX IF NOT EXISTS idx_raw_bond_curve_curve_date ON raw_bond_curve(curve, date);
+CREATE INDEX IF NOT EXISTS idx_raw_bond_index_trade_date ON raw_bond_index(trade_date);
+CREATE INDEX IF NOT EXISTS idx_raw_bond_index_code_date ON raw_bond_index(index_code, trade_date);
+CREATE INDEX IF NOT EXISTS idx_raw_bond_index_type ON raw_bond_index(type_lv1, type_lv2, type_lv3);
+CREATE UNIQUE INDEX IF NOT EXISTS uidx_raw_bond_index_trade_date_code_not_null ON raw_bond_index(trade_date, index_code) WHERE index_code IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_raw_policy_rate_date ON raw_policy_rate(date);
+CREATE INDEX IF NOT EXISTS idx_raw_policy_rate_type_term_date ON raw_policy_rate(type, term, date);
+CREATE INDEX IF NOT EXISTS idx_raw_money_market_date ON raw_money_market(date);
+CREATE INDEX IF NOT EXISTS idx_raw_futures_date ON raw_futures(date);
+CREATE INDEX IF NOT EXISTS idx_raw_overseas_macro_date ON raw_overseas_macro(date);
+CREATE INDEX IF NOT EXISTS idx_raw_life_asset_date ON raw_life_asset(date);
+CREATE INDEX IF NOT EXISTS idx_raw_jisilu_etf_snapshot_date ON raw_jisilu_etf(snapshot_date);
+CREATE INDEX IF NOT EXISTS idx_raw_jisilu_etf_fund_date ON raw_jisilu_etf(fund_id, snapshot_date);
+CREATE INDEX IF NOT EXISTS idx_raw_jisilu_etf_index_nm ON raw_jisilu_etf(index_nm);
+CREATE INDEX IF NOT EXISTS idx_metrics_metric_key ON metrics(metric_key, date);
+CREATE INDEX IF NOT EXISTS idx_signal_main_key ON signal_main(signal_key, date);
+COMMIT;
