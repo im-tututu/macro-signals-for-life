@@ -1,0 +1,1 @@
+"""FRED source fetcher."""

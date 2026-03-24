@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths:
-      - 'src/**'
+      - 'gas/**'
       - 'package.json'
       - 'package-lock.json'
       - '.github/workflows/deploy-gas.yml'

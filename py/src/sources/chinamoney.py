@@ -1,0 +1,1 @@
+"""ChinaMoney source fetcher."""

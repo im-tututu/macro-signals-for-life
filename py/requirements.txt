@@ -1,0 +1,6 @@
+pandas
+requests
+numpy
+gspread
+google-auth
+python-dotenv

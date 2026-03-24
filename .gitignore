@@ -1,3 +1,105 @@
-.claspignore
-node_modules/
+# =========================
+# OS / Editor
+# =========================
 .DS_Store
+Thumbs.db
+
+.vscode/
+.idea/
+
+# =========================
+# Python cache / build
+# =========================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+dist/
+build/
+*.egg-info/
+
+# =========================
+# Virtual env
+# =========================
+.venv/
+venv/
+env/
+
+# =========================
+# Environment / secrets
+# =========================
+.env
+.env.*
+!.env.example
+
+# Google service account / credentials
+*service_account*.json
+*credentials*.json
+token.json
+secrets.json
+
+# =========================
+# Local database / runtime data
+# =========================
+py/data/db.sqlite
+py/data/*.sqlite
+py/data/*.sqlite3
+py/data/logs/
+py/data/exports/
+py/data/snapshots/
+py/data/tmp/
+py/data/cache/
+
+# keep folder structure if needed
+!py/data/.gitkeep
+!py/data/logs/.gitkeep
+!py/data/exports/.gitkeep
+!py/data/snapshots/.gitkeep
+
+# =========================
+# Python local outputs
+# =========================
+*.log
+*.tmp
+*.bak
+
+# =========================
+# Tests / local artifacts
+# =========================
+.pyre/
+.tox/
+.nox/
+
+# =========================
+# Node / frontend (future-proof, harmless if unused)
+# =========================
+node_modules/
+.next/
+coverage/
+
+# =========================
+# GAS / clasp local auth
+# =========================
+# .clasp.json
+# .clasprc.json
+.claspignore
+
+
+# If you later put deployment-only local files under gas/
+# gas/.clasp.json
+# gas/.clasprc.json
+
+# =========================
+# Optional: generated docs or exports
+# Uncomment if you later generate these locally
+# =========================
+# docs/_build/
+# *.csv
+# *.tsv
