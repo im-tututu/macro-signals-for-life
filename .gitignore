@@ -49,7 +49,7 @@ secrets.json
 # =========================
 # Local database / runtime data
 # =========================
-py/data/db.sqlite*
+py/data/*db.sqlite*
 py/data/*.sqlite
 py/data/*.sqlite3
 py/data/logs/
