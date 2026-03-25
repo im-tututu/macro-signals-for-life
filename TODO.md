@@ -1,178 +1,253 @@
 # TODO
 
-本清单基于当前重构后的代码库编写，目标不是继续大改目录，而是在现有结构上把抓取、落表、重建、触发器、告警逐步补齐。
+本清单基于当前 `py/` 目录现状整理，只保留 **Python 底座里仍未完成**、且与原 GAS TODO 对应的事项。
 
-当前目录基线：
+当前已完成的基础能力不再重复列入：
 
-- `10-15`：source 层（抓取/解析）
-- `20-24`：raw 层（原始表写入）
-- `30-31`：metrics / signal
-- `40`：自定义公式
-- `50-52`：jobs / trigger / notify-log
+- 原始层 `source -> store -> job` 主体结构已统一
+- `money_market / bond_curve / overseas_macro / policy_rate / futures / etf / bond_index` 已有可运行入口
+- `bond_curve backfill` 已接入交易日文件与 pre-check
+- 项目内 [trading_days.csv](/Users/zy/Documents/git/macro-signals-for-life-1/py/data/reference/trading_days.csv) 已建立并支持更新到 `2026-12-31`
 
 ---
 
-## P0｜先做完的稳定性事项
+## P0｜优先补齐的底座缺口
 
-### 1. 跑通主链路 smoke test
-- [ ] 在 GAS 中完整执行一次 `runEnhancedSystem()`
-- [ ] 验证以下表至少能正常创建/更新：
-  - [ ] `yc_curve`
-  - [ ] `money_market`
+### 1. 原始层回填能力继续补全
+
+- [ ] `policy_rate` 从“近期事件补采”升级为更明确的历史回填策略
+  - [ ] 支持按日期范围回填，而不只靠 `--limit`
+  - [ ] 支持已存在业务键的 pre-check，减少重复请求
+- [ ] `bond_index` 从“单 index/手动传 id”升级为批量 backfill
+  - [ ] 从 `cfg_bond_index_list` 读取 Python 可用的指数配置
+  - [ ] 定义哪些 index_name / index_code / provider 组合是真正的债券指数
+  - [ ] 支持批量抓取与分批失败重试
+- [ ] 明确哪些 raw 表支持 backfill，哪些只做 latest sync
+  - [ ] `bond_curve`
   - [ ] `policy_rate`
-  - [ ] `原始_海外宏观`
-  - [ ] `metrics`
-  - [ ] `signal`
-- [ ] 复核 `50_jobs.js` 里的入口函数都可独立运行
-- [ ] 复核 `51_trigger_admin.js` 的默认触发器注册是否与实际更新时机一致
+  - [ ] `bond_index`
+  - [ ] `money_market`
+  - [ ] `overseas_macro`
 
-### 2. 统一重复工具函数的收口
-- [ ] 继续检查 `20-24` 中仍可上提到 `02_utils.js` 的通用逻辑
-- [ ] 明确“允许保留在业务文件内”的函数边界：
-  - [ ] 与具体表头强绑定的 row mapping
-  - [ ] 与具体来源强绑定的解析逻辑
-- [ ] 避免再次出现同一类函数的多份实现：
-  - [ ] 日期归一化
-  - [ ] upsert by date
-  - [ ] sheet ensure / header ensure
-  - [ ] safe fetch / safe json parse
+### 2. 真实数据与占位数据边界收口
 
-### 3. 统一日志与错误口径
-- [ ] 统一抓取成功日志格式：`source | dataset | date | rows | message`
-- [ ] 统一抓取失败日志格式：`source | dataset | error | url(optional)`
-- [ ] `52_notify_log.js` 中补一版每日汇总输出
-- [ ] 明确哪些任务失败要发通知，哪些只记日志
+- [ ] `life_asset` 仍是 placeholder，需要改成真实抓取链路
+  - [ ] 明确首批真实字段
+  - [ ] 明确各字段对应来源
+  - [ ] 去掉“占位成功写入”造成的假稳定
+- [ ] `stats_gov` 仍未正式落地
+  - [ ] 明确首批指标
+  - [ ] 明确发布日期与观察期字段口径
+  - [ ] 接入 raw 表真实写入
+- [ ] `external_misc` 中 SGE / BOC / 货币基金仍是占位能力
+  - [ ] 明确真实来源
+  - [ ] 明确抓取频率
+  - [ ] 明确 source note / source url 约定
+
+### 3. 原始表数据质量前置检查
+
+- [ ] 把“抓后 dedupe”继续升级为“抓前 pre-check”
+  - [ ] `policy_rate`
+  - [ ] `bond_index`
+  - [ ] `money_market`
+- [ ] 增加原始表关键字段完整性判断
+  - [ ] `raw_bond_curve` 至少若干关键 tenor 非空
+  - [ ] `raw_policy_rate` 的 `date/type/term/rate`
+  - [ ] `raw_overseas_macro` 的关键指标不全为空
+- [ ] 增加异常值初筛规则
+  - [ ] 利率量级异常
+  - [ ] 日期字段非标准格式
+  - [ ] 单日重复快照异常激增
 
 ---
 
-## P1｜来源层补全（按优先级）
+## P1｜来源层与 raw 层待完成事项
 
-### 4. 国家统计局来源正式实现（`14_source_stats_gov.js`）
-当前还是占位。
+### 4. 国家统计局来源正式实现
 
-- [ ] 明确首批接入指标
+- [ ] 在 Python 侧实现 `stats_gov` 正式 source
+- [ ] 优先接入这些月频指标
   - [ ] CPI
   - [ ] PPI
   - [ ] 社零
   - [ ] 固投
   - [ ] 工业增加值
-  - [ ] 失业率 / 就业相关（如需要）
-- [ ] 确定抓取方式（接口 / 页面解析 / 手工维护兜底）
-- [ ] 统一返回 row object，交由 `24_raw_macro.js` 写表
-- [ ] 处理月频数据“发布日期”和“观察期”的区别
+- [ ] 明确这些指标应该落到哪张 raw 表
+  - [ ] 继续并入 `raw_life_asset`
+  - [ ] 或拆出新的 Python raw macro 表
 
-### 5. 外部零散来源补全（`15_source_external_misc.js`）
-- [ ] Alpha Vantage：复核免费 key 限流下的抓取频率与回退逻辑
-- [ ] 上海黄金交易所：实现首个稳定字段（先从 1 个品种开始）
-- [ ] 中国银行：实现人民币汇率/外汇牌价字段
-- [ ] 余额宝/货币基金：明确真实数据发布源，不直接把“余额宝”当抽象来源名
-- [ ] 给每个来源补 source note / source url 字段约定
+### 5. 海外宏观与生活/资产价格边界收口
 
-### 6. FRED 来源完善（`13_source_fred.js`）
-- [ ] 复核现有 series code 与字段映射是否齐全
-- [ ] 明确缺失值 / 节假日 / 周末处理口径
-- [ ] 明确 observation date 与 fetched_at 的使用边界
-- [ ] 给新增 series 预留统一注册方式
+- [ ] `raw_overseas_macro` 与 `raw_life_asset` 的字段边界需要进一步固定
+- [ ] 明确这几个时间字段的统一口径
+  - [ ] `date`
+  - [ ] `source_date`
+  - [ ] `fetched_at`
+- [ ] 明确覆盖策略
+  - [ ] 缺失值是否覆盖旧值
+  - [ ] 最新值是否允许回写历史日期
+
+### 6. ETF 抓取与历史快照策略
+
+- [ ] 当前 `etf` 已去重，但仍只是“当日快照抓取”
+- [ ] 明确 Python 侧是否要支持 ETF 历史快照累积
+- [ ] 若支持，需要明确：
+  - [ ] 快照频率
+  - [ ] 是否按交易日抓
+  - [ ] 是否需要 pre-check 跳过当日已抓
+
+### 7. `bond_index` 映射层缺失
+
+- [ ] GAS 中 `26_mapping_bond_index_name.js` 对应能力尚未迁到 Python
+- [ ] 需要在 Python 侧补
+  - [ ] 名称映射
+  - [ ] provider 区分
+  - [ ] 候选 index 清洗
+  - [ ] 配置表校验
 
 ---
 
-## P1｜raw 层补全
+## P1｜任务与调度层待完成事项
 
-### 7. 宏观原始表收口（`24_raw_macro.js`）
-当前这里承接：FRED / Alpha Vantage / 国家统计局 / SGE / BOC / 余额宝。
+### 8. Python 定时 job 体系还不完整
 
-- [ ] 将 `fetchLifeAsset_()` 从“安全占位”升级为真实写表逻辑
-- [ ] 拆清“海外宏观”和“生活/现金管理类资产”的字段边界
-- [ ] 统一 `source_note` 生成规则
-- [ ] 明确 `date`、`fetched_at`、`source_date` 各自含义
-- [ ] 统一空值处理和覆盖策略
+- [ ] `run_daily_job.py` 只是手动入口，尚未形成完整调度方案
+- [ ] 需要补一版 Python 侧 job registry
+  - [ ] job 名
+  - [ ] 默认参数
+  - [ ] 推荐执行时间
+  - [ ] 是否允许 dry-run
+- [ ] 为各来源定义建议调度节奏
+  - [ ] Chinabond 曲线：收盘后
+  - [ ] ChinaMoney：盘中/日终
+  - [ ] PBC：轮询
+  - [ ] FRED / Alpha：夜间
+  - [ ] 交易日文件：定期更新
 
-### 8. 原始表表头文档化
-- [ ] 为 `20-24` 每张表补 header 注释
-- [ ] 在 README 或独立 schema 文档中写明：
-  - [ ] 表名
-  - [ ] 主键列
-  - [ ] 来源
+### 9. 失败处理与重试策略继续统一
+
+- [ ] `run_backfill.py` 目前已能汇总失败，但不同 source 的重试策略还不完全一致
+- [ ] 需要统一：
+  - [ ] 最大重试次数
+  - [ ] 退避时间
+  - [ ] 可重试错误类型
+  - [ ] 失败后的日志格式
+
+### 10. 通知分级仍需完善
+
+- [ ] 成功通知目前仍较粗
+- [ ] 需要补：
+  - [ ] 每日汇总通知
+  - [ ] 失败分级
+  - [ ] API key 缺失仅提醒一次
+  - [ ] backfill 批量失败摘要
+
+---
+
+## P2｜metrics / signal 层仍基本未实现
+
+### 11. metrics 计算层
+
+- [ ] [metrics.py](/Users/zy/Documents/git/macro-signals-for-life-1/py/src/analytics/metrics.py) 目前仍是空壳
+- [ ] 需要从 GAS `30_metrics.js` 提取 Python 版实现
+  - [ ] 利率/曲线指标
+  - [ ] 资金面指标
+  - [ ] 政策利率指标
+  - [ ] 海外宏观指标
+- [ ] 明确每个 metric 的：
+  - [ ] 输入表
+  - [ ] 输入列
+  - [ ] 计算口径
+  - [ ] 缺失值保护
+
+### 12. signal 生成层
+
+- [ ] [signals.py](/Users/zy/Documents/git/macro-signals-for-life-1/py/src/analytics/signals.py) 目前仍是空壳
+- [ ] 需要从 GAS `31_signal.js` 提取 Python 版实现
+  - [ ] signal_main
+  - [ ] signal_detail
+  - [ ] signal_review
+- [ ] 明确：
+  - [ ] 信号分层
+  - [ ] 分数口径
+  - [ ] note 汇总规则
+  - [ ] 空数据时不误判的保护
+
+### 13. metrics / signal 执行入口
+
+- [ ] 目前没有 Python 侧统一入口生成 `metrics` / `signal`
+- [ ] 需要新增脚本或 job
+  - [ ] `run_metrics.py`
+  - [ ] `run_signals.py`
+  - [ ] 或并入统一 `run_pipeline.py`
+
+---
+
+## P2｜质量检查与可观测性
+
+### 14. 原始表检查脚本
+
+- [ ] 补一个图形界面之外的快速检查脚本
+  - [ ] 行数
+  - [ ] 日期范围
+  - [ ] 重复 key
+  - [ ] 空 key
+  - [ ] 关键列空值率
+- [ ] 支持单表和全部 raw 表
+
+### 15. source 对账与抽样校验
+
+- [ ] 目前更多依赖人工抽样
+- [ ] 需要补最小自动校验
+  - [ ] `bond_curve` 抽查关键 tenor
+  - [ ] `policy_rate` 抽查最新公告
+  - [ ] `money_market` 抽查关键字段
+  - [ ] `bond_index` 抽查 duration / ytm
+
+### 16. smoke test 体系继续补
+
+- [ ] `smoke_sources.py` / `smoke_stores.py` 还偏轻
+- [ ] 需要补：
+  - [ ] 单日抓取 smoke
+  - [ ] 单段 backfill smoke
+  - [ ] 原始表 review smoke
+  - [ ] metrics / signal smoke
+
+---
+
+## P3｜文档与入口整理
+
+### 17. Python CLI 入口继续收口
+
+- [ ] 当前入口分散在：
+  - [ ] [main.py](/Users/zy/Documents/git/macro-signals-for-life-1/py/main.py)
+  - [ ] [run_daily_job.py](/Users/zy/Documents/git/macro-signals-for-life-1/py/scripts/run_daily_job.py)
+  - [ ] [run_backfill.py](/Users/zy/Documents/git/macro-signals-for-life-1/py/scripts/run_backfill.py)
+  - [ ] [update_trading_calendar.py](/Users/zy/Documents/git/macro-signals-for-life-1/py/scripts/update_trading_calendar.py)
+- [ ] 后续需要考虑是否统一成一个更清晰的 CLI
+
+### 18. schema / 表头文档
+
+- [ ] Python 侧仍缺一份正式 schema 文档
+- [ ] 至少需要覆盖：
+  - [ ] raw 表主键
   - [ ] 更新频率
-  - [ ] 允许为空的字段
+  - [ ] 来源
+  - [ ] 允许为空字段
+  - [ ] 业务日期字段定义
 
-### 9. 回补与增量策略整理
-- [ ] 明确哪些表支持历史回补，哪些只做 latest sync
-- [ ] 曲线、政策利率、资金面、宏观分别定义 backfill 策略
-- [ ] 给耗时任务加批次控制，避免触发器超时
+### 19. README 与 Python 文档同步
 
----
-
-## P2｜metrics / signal 层整理
-
-### 10. `30_metrics.js` 精简与分段注释
-- [ ] 将指标按 section 重排：
-  - [ ] 利率/曲线
-  - [ ] 资金面
-  - [ ] 政策利率
-  - [ ] 海外宏观
-- [ ] 清理已不用的中间字段或兼容字段
-- [ ] 明确每个指标的输入表与依赖列
-- [ ] 给关键指标补公式注释（尤其是 MA / pct / percentile）
-
-### 11. `31_signal.js` 汇总口径整理
-- [ ] 统一 view / weight / note 的命名规则
-- [ ] 复核 rate / credit / funding / macro 的层级关系
-- [ ] 检查 `note_summary` / `note_alloc` 是否仍有重复信息
-- [ ] 明确信号主表与 review / recent 视图的边界
-
-### 12. 指标与信号的最小校验
-- [ ] 给核心指标补最小断言函数
-- [ ] 给核心信号补“空数据时不误判”的保护
-- [ ] 增加一组 smoke test helper（手工执行即可）
-
----
-
-## P2｜jobs / trigger / notify
-
-### 13. 触发器按来源发布时间重排（`50_jobs.js`）
-不要把所有源绑成同一节奏。
-
-- [ ] Chinabond 曲线：收盘后
-- [ ] ChinaMoney 资金面：盘中/日终二选一或双入口
-- [ ] PBC：窗口轮询
-- [ ] FRED / Alpha Vantage：夜间
-- [ ] 国家统计局：月频/手动补跑
-- [ ] SGE / BOC / 货币基金：按实际发布时间决定是夜间还是窗口轮询
-
-### 14. 触发器注册表化（`51_trigger_admin.js`）
-- [ ] 把默认触发器集中成一个 registry
-- [ ] 支持一键删除后重建
-- [ ] 在日志里输出当前注册结果
-- [ ] 避免在 UI 中手工维护多套不一致触发器
-
-### 15. 通知分级（`52_notify_log.js`）
-- [ ] 失败立即通知
-- [ ] 成功默认不通知，只写日志
-- [ ] 每日收盘后输出一条摘要
-- [ ] API key 缺失只提醒一次，避免刷屏
-
----
-
-## P3｜公式层与文档
-
-### 16. `40_formula_chinabond_index.js` 清理
-- [ ] 明确哪些函数是给单元格直接调用的
-- [ ] 给自定义公式补参数说明与示例
-- [ ] 检查是否有适合迁回 raw 层的“伪公式函数”
-
-### 17. README / TODO / schema 同步
-- [ ] README 保持“目录、主入口、Secrets、触发器”四部分始终最新
-- [ ] TODO 只保留未完成事项，不把已完成重构继续留在列表里
-- [ ] 新增来源/新表头时同步更新文档
+- [ ] 当 raw 表、job、backfill 能力继续变化时，同步更新：
+  - [ ] README
+  - [ ] [python_使用说明.md](/Users/zy/Documents/git/macro-signals-for-life-1/docs/python_使用说明.md)
+  - [ ] 本文件
 
 ---
 
 ## 暂不做
 
-这些事项先不进当前主线，避免范围失控：
-
-- [ ] 不单独再拆更多 `metrics_*` / `signal_*` 文件
-- [ ] 不为了“理论更优雅”继续细分 source 文件到每个零散来源一个文件
-- [ ] 不在主流程未稳定前引入复杂测试框架
-- [ ] 不在未确定真实数据源前硬写 SGE / BOC / 余额宝完整实现
+- [ ] 不为了“更优雅”继续大拆目录结构
+- [ ] 不在 raw 主链路未稳定前引入复杂测试框架
+- [ ] 不在真实来源未确认前硬补 SGE / BOC / 货币基金完整实现
+- [ ] 不急着把所有入口强行统一成一个超大 CLI

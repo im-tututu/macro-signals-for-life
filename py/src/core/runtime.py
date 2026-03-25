@@ -116,7 +116,8 @@ class RunContext:
             self.logger.info("[%s] %s", status, message)
             if detail:
                 self.logger.info(detail)
-        if self.notifier:
+        # dry-run 成功时不发外部通知，避免本地演练反复触发 Bark。
+        if self.notifier and (not self.dry_run or status != "success"):
             title = f"{self.job_name} {'DRY-RUN' if self.dry_run else status.upper()}"
             self.notifier.notify(title, message, level="INFO" if status == "success" else "WARNING")
         self._finished = True

@@ -2,8 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from src.core.config import TABLE_RAW_JISILU_ETF
+from src.core.utils import to_float
+from src.sources.base import FetchResult
 from .base import BaseSqliteStore, TableSpec
 
 
@@ -68,7 +71,77 @@ ETF_SPEC = TableSpec(
 
 @dataclass
 class EtfStore(BaseSqliteStore):
+    """指数 ETF 原始表 store。
+
+    职责分工：
+    - source 负责抓取集思录快照
+    - store 负责把快照列表映射成 raw_jisilu_etf 多行
+    - job 负责定义抓取参数与写入策略
+    """
+
     spec: TableSpec = ETF_SPEC
 
     def __init__(self, db_path: Path | None = None, *, auto_init: bool = True) -> None:
         super().__init__(db_path=db_path, auto_init=auto_init)
+
+    @staticmethod
+    def build_row_from_payload_row(
+        snapshot_date: str,
+        fetched_at: str,
+        row: dict[str, Any],
+        *,
+        records_total: Any = "",
+        source_url: str = "",
+    ) -> dict[str, Any]:
+        """把单条集思录 row 转成表行。"""
+
+        cell = row.get("cell", row) if isinstance(row, dict) else {}
+        return {
+            "snapshot_date": snapshot_date,
+            "fetched_at": fetched_at,
+            "fund_id": str(cell.get("fund_id") or row.get("id") or ""),
+            "fund_nm": str(cell.get("fund_nm") or ""),
+            "index_nm": str(cell.get("index_nm") or ""),
+            "issuer_nm": str(cell.get("issuer_nm") or ""),
+            "price": to_float(cell.get("price")),
+            "increase_rt": to_float(cell.get("increase_rt")),
+            "volume_wan": to_float(cell.get("volume")),
+            "amount_yi": to_float(cell.get("amount")),
+            "unit_total_yi": to_float(cell.get("unit_total")),
+            "discount_rt": to_float(cell.get("discount_rt")),
+            "fund_nav": to_float(cell.get("fund_nav")),
+            "nav_dt": str(cell.get("nav_dt") or ""),
+            "estimate_value": to_float(cell.get("estimate_value")),
+            "creation_unit": to_float(cell.get("creation_unit")),
+            "pe": to_float(cell.get("pe")),
+            "pb": to_float(cell.get("pb")),
+            "last_time": str(cell.get("last_time") or ""),
+            "last_est_time": str(cell.get("last_est_time") or ""),
+            "is_qdii": str(cell.get("is_qdii") or ""),
+            "is_t0": str(cell.get("is_t0") or ""),
+            "apply_fee": to_float(cell.get("apply_fee")),
+            "redeem_fee": to_float(cell.get("redeem_fee")),
+            "records_total": to_float(records_total),
+            "source_url": source_url,
+        }
+
+    @classmethod
+    def build_rows_from_fetch_result(cls, fetch_result: FetchResult[dict[str, Any]]) -> list[dict[str, Any]]:
+        """把 source 返回的 ETF 快照结果转成多条表行。"""
+
+        payload = fetch_result.payload
+        snapshot_date = str(payload.get("snapshot_date") or "")
+        fetched_at = str(payload.get("fetched_at") or "")
+        rows = payload.get("rows", []) or []
+        records_total = payload.get("records", "")
+        source_url = str(payload.get("last_url") or fetch_result.source_url or "")
+        return [
+            cls.build_row_from_payload_row(
+                snapshot_date,
+                fetched_at,
+                row,
+                records_total=records_total,
+                source_url=source_url,
+            )
+            for row in rows
+        ]

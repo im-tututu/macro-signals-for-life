@@ -5,11 +5,11 @@ import re
 import time
 from typing import Any, Dict, Iterable, Optional
 
-from core.config import OVERSEAS_MACRO_ALPHA_SERIES, settings
-from core.models import FuturesSnapshot, Observation
-from core.utils import now_text, norm_ymd, to_float, today_ymd
+from src.core.config import OVERSEAS_MACRO_ALPHA_SERIES, settings
+from src.core.models import FuturesSnapshot, Observation
+from src.core.utils import now_text, norm_ymd, to_float, today_ymd
 
-from .base import BaseSource
+from .base import BaseSource, FetchResult
 
 ALPHA_VANTAGE_QUERY_URL = "https://www.alphavantage.co/query"
 SINA_FUTURES_QUOTE_URL = "https://hq.sinajs.cn/list="
@@ -19,6 +19,13 @@ MONEY_FUND_PROXY_URL = "https://fundf10.eastmoney.com/jjjz_000198.html"
 
 
 class ExternalMiscSource(BaseSource):
+    """零散外部来源。
+
+    当前重点覆盖：
+    - Alpha Vantage 商品数据
+    - 新浪国债期货报价
+    """
+
     def build_alpha_vantage_url(self, spec: Dict[str, str], api_key: str | None = None) -> str:
         api_key = api_key or settings.alpha_vantage_api_key
         if not api_key:
@@ -75,6 +82,15 @@ class ExternalMiscSource(BaseSource):
                 time.sleep(1.2)
         return out
 
+    def fetch_overseas_macro_from_alpha_vantage_result(self) -> FetchResult[Dict[str, Observation | None]]:
+        """统一返回 FetchResult，供 job/store 层复用。"""
+
+        return FetchResult(
+            payload=self.fetch_overseas_macro_from_alpha_vantage(),
+            source_url=ALPHA_VANTAGE_QUERY_URL,
+            meta={"provider": "ALPHA_VANTAGE"},
+        )
+
     def fetch_sina_price(self, symbol: str | Iterable[str]) -> Optional[float]:
         candidates = [symbol] if isinstance(symbol, str) else list(symbol)
         expanded: list[str] = []
@@ -106,8 +122,17 @@ class ExternalMiscSource(BaseSource):
         return FuturesSnapshot(
             date=today_ymd(),
             source="hq.sinajs.cn",
-            values={"T0_last": self.fetch_sina_price("T0"), "TF0_last": self.fetch_sina_price("TF0")},
+            values={"t0_last": self.fetch_sina_price("T0"), "tf0_last": self.fetch_sina_price("TF0")},
             fetched_at=now_text(),
+        )
+
+    def fetch_bond_futures_result(self) -> FetchResult[FuturesSnapshot]:
+        """统一返回 FetchResult，供 store/job 层复用。"""
+
+        return FetchResult(
+            payload=self.fetch_bond_futures_snapshot(),
+            source_url=SINA_FUTURES_QUOTE_URL,
+            meta={"provider": "SINA_FUTURES"},
         )
 
     def fetch_sge_gold_snapshot(self) -> Dict[str, Any]:
@@ -118,3 +143,12 @@ class ExternalMiscSource(BaseSource):
 
     def fetch_money_fund_7d_snapshot(self) -> Dict[str, Any]:
         return {"date": "", "money_fund_7d": None, "source": MONEY_FUND_PROXY_URL, "implemented": False}
+
+    def fetch_sge_gold_result(self) -> FetchResult[Dict[str, Any]]:
+        return FetchResult(payload=self.fetch_sge_gold_snapshot(), source_url=SGE_HOME_URL, meta={"provider": "SGE", "placeholder": True})
+
+    def fetch_boc_deposit_1y_result(self) -> FetchResult[Dict[str, Any]]:
+        return FetchResult(payload=self.fetch_boc_deposit_1y_snapshot(), source_url=BOC_DEPOSIT_RATE_URL, meta={"provider": "BOC", "placeholder": True})
+
+    def fetch_money_fund_7d_result(self) -> FetchResult[Dict[str, Any]]:
+        return FetchResult(payload=self.fetch_money_fund_7d_snapshot(), source_url=MONEY_FUND_PROXY_URL, meta={"provider": "MONEY_FUND", "placeholder": True})

@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from pathlib import Path
-from typing import Callable, Iterable, Sequence
+from typing import Callable, Iterable, Sequence, TypeVar
 
 from src.core.runtime import RunContext, WriteStats
+from src.sources.base import FetchResult
 from src.stores import (
     BondCurveStore,
     BondIndexStore,
@@ -20,6 +21,7 @@ from src.stores import (
 )
 from src.stores.base import BaseSqliteStore
 
+T = TypeVar("T")
 
 STORE_REGISTRY: dict[str, type[BaseSqliteStore]] = {
     "raw_bond_curve": BondCurveStore,
@@ -114,6 +116,87 @@ def run_incremental_job(
         else:
             kept = [row for row in rows if row.get(store.spec.date_field) is not None and str(row[store.spec.date_field]) > latest]
     return run_upsert_job(store=store, rows=kept, job_name=job_name, source_type=source_type, dry_run=dry_run)
+
+
+def run_fetch_transform_job(
+    *,
+    store: BaseSqliteStore,
+    fetch: Callable[[], FetchResult[T]],
+    row_builder: Callable[[FetchResult[T]], dict],
+    job_name: str,
+    source_type: str,
+    dry_run: bool = False,
+    incremental: bool = True,
+    inclusive: bool = False,
+    **latest_filters: object,
+) -> WriteStats:
+    """通用编排 helper。
+
+    适用场景：
+    1. source 先抓取并返回 FetchResult
+    2. store 负责把 FetchResult / payload 映射成表行
+    3. job 只需要声明“抓什么、如何写入”
+    """
+
+    fetch_result = fetch()
+    row = row_builder(fetch_result)
+    if incremental:
+        return run_incremental_job(
+            store=store,
+            rows=[row],
+            job_name=job_name,
+            source_type=source_type,
+            dry_run=dry_run,
+            inclusive=inclusive,
+            **latest_filters,
+        )
+    return run_upsert_job(
+        store=store,
+        rows=[row],
+        job_name=job_name,
+        source_type=source_type,
+        dry_run=dry_run,
+    )
+
+
+def run_fetch_transform_many_job(
+    *,
+    store: BaseSqliteStore,
+    fetch: Callable[[], FetchResult[T]],
+    rows_builder: Callable[[FetchResult[T]], Iterable[dict]],
+    job_name: str,
+    source_type: str,
+    dry_run: bool = False,
+    incremental: bool = True,
+    inclusive: bool = False,
+    **latest_filters: object,
+) -> WriteStats:
+    """通用多行编排 helper。
+
+    适用场景：
+    - 一个来源一次抓取会产生多条业务行
+    - 例如收益率曲线、政策事件、ETF 快照等
+    """
+
+    fetch_result = fetch()
+    rows = list(rows_builder(fetch_result))
+    if incremental:
+        return run_incremental_job(
+            store=store,
+            rows=rows,
+            job_name=job_name,
+            source_type=source_type,
+            dry_run=dry_run,
+            inclusive=inclusive,
+            **latest_filters,
+        )
+    return run_upsert_job(
+        store=store,
+        rows=rows,
+        job_name=job_name,
+        source_type=source_type,
+        dry_run=dry_run,
+    )
 
 
 def run_review_job(

@@ -1,7 +1,13 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
+
+CURRENT_DIR = Path(__file__).resolve().parent
+PY_ROOT = CURRENT_DIR.parent
+if str(PY_ROOT) not in sys.path:
+    sys.path.insert(0, str(PY_ROOT))
 
 from src.jobs.manual import upsert_batch
 

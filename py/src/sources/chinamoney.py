@@ -4,10 +4,10 @@ import csv
 import io
 from typing import Any, Dict, Iterable, List
 
-from core.models import MoneyMarketSnapshot
-from core.utils import now_text, norm_ymd, to_float, today_ymd
+from src.core.models import MoneyMarketSnapshot
+from src.core.utils import now_text, norm_ymd, to_float, today_ymd
 
-from .base import BaseSource
+from .base import BaseSource, FetchResult
 
 CHINAMONEY_PRR_MD_URL = "https://www.chinamoney.com.cn/r/cms/www/chinamoney/data/currency/prr-md.json"
 CHINAMONEY_PRR_CHART_URL = "https://www.chinamoney.com.cn/r/cms/www/chinamoney/data/currency/prr-chrt.csv"
@@ -15,6 +15,13 @@ CHINAMONEY_IBLR_CHART_URL = "https://www.chinamoney.com.cn/r/cms/www/chinamoney/
 
 
 class ChinaMoneySource(BaseSource):
+    """ChinaMoney 资金面来源。
+
+    这里不关心 SQLite 表结构，只返回领域对象和少量来源元信息。
+    """
+
+    BIZ_DATE_KEYS = ("showDateCN", "date", "showDate", "tradeDate")
+
     @staticmethod
     def _iter_objects(node: Any) -> Iterable[Dict[str, Any]]:
         if isinstance(node, dict):
@@ -63,6 +70,26 @@ class ChinaMoneySource(BaseSource):
             if "R001" in key.upper() or name.upper() == "R001":
                 fields.setdefault("R001_weightedRate", weighted)
         return MoneyMarketSnapshot(date=record_date, source=CHINAMONEY_PRR_MD_URL, fields=fields, fetched_at=now_text())
+
+    @classmethod
+    def derive_business_date(cls, payload: Dict[str, Any]) -> str:
+        data_block = payload.get("data", {}) if isinstance(payload, dict) else {}
+        for key in cls.BIZ_DATE_KEYS:
+            value = norm_ymd(data_block.get(key))
+            if value:
+                return value
+        return today_ymd()
+
+    def fetch_money_market(self) -> FetchResult[MoneyMarketSnapshot]:
+        payload = self.http.get_json(CHINAMONEY_PRR_MD_URL)
+        snapshot = self.fetch_money_market_snapshot()
+        snapshot.date = self.derive_business_date(payload)
+        data_block = payload.get("data", {}) if isinstance(payload, dict) else {}
+        return FetchResult(
+            payload=snapshot,
+            source_url=CHINAMONEY_PRR_MD_URL,
+            meta={"show_date_cn": str(data_block.get("showDateCN") or "")},
+        )
 
     def fetch_chart_csv(self, url: str) -> List[Dict[str, str]]:
         text = self.http.get_text(url)

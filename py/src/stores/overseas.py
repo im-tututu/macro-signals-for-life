@@ -4,7 +4,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from src.core.models import Observation
+from src.core.utils import now_text, today_ymd
 from src.core.config import TABLE_RAW_OVERSEAS_MACRO
+from src.sources.base import FetchResult
 from .base import BaseSqliteStore, TableSpec
 
 
@@ -49,10 +52,80 @@ OVERSEAS_SPEC = TableSpec(
 
 @dataclass
 class OverseasStore(BaseSqliteStore):
+    """海外宏观原始表 store。
+
+    职责分工：
+    - source 分别抓取 FRED / Alpha Vantage
+    - store 负责把两边 observation 合并成一条 raw_overseas_macro 表行
+    - job 负责定义抓取频率与写入策略
+    """
+
     spec: TableSpec = OVERSEAS_SPEC
 
     def __init__(self, db_path: Path | None = None, *, auto_init: bool = True) -> None:
         super().__init__(db_path=db_path, auto_init=auto_init)
+
+    @staticmethod
+    def _pick_obs_date(obs: Observation | None) -> str:
+        if obs is None:
+            return ""
+        return obs.date or ""
+
+    @staticmethod
+    def _pick_obs_value(obs: Observation | None) -> float | None:
+        if obs is None:
+            return None
+        return obs.value
+
+    @staticmethod
+    def _build_source_note(
+        fred_payload: dict[str, Observation],
+        alpha_payload: dict[str, Observation | None],
+    ) -> str:
+        parts: list[str] = []
+        if fred_payload:
+            parts.append("FRED")
+        if alpha_payload:
+            parts.append("ALPHA_VANTAGE")
+        return " | ".join(parts)
+
+    @classmethod
+    def build_row_from_fetch_results(
+        cls,
+        fred_result: FetchResult[dict[str, Observation]],
+        alpha_result: FetchResult[dict[str, Observation | None]],
+    ) -> dict[str, Any]:
+        """把两个来源的抓取结果合并成单条海外宏观表行。"""
+
+        fred_payload = fred_result.payload
+        alpha_payload = alpha_result.payload
+        row_date = (
+            cls._pick_obs_date(fred_payload.get("spx"))
+            or cls._pick_obs_date(fred_payload.get("nasdaq_100"))
+            or cls._pick_obs_date(fred_payload.get("ust_10y"))
+            or cls._pick_obs_date(fred_payload.get("sofr"))
+            or today_ymd()
+        )
+        return {
+            "date": row_date,
+            "fed_upper": cls._pick_obs_value(fred_payload.get("fed_upper")),
+            "fed_lower": cls._pick_obs_value(fred_payload.get("fed_lower")),
+            "sofr": cls._pick_obs_value(fred_payload.get("sofr")),
+            "ust_2y": cls._pick_obs_value(fred_payload.get("ust_2y")),
+            "ust_10y": cls._pick_obs_value(fred_payload.get("ust_10y")),
+            "us_real_10y": cls._pick_obs_value(fred_payload.get("us_real_10y")),
+            "usd_broad": cls._pick_obs_value(fred_payload.get("usd_broad")),
+            "usd_cny": cls._pick_obs_value(fred_payload.get("usd_cny")),
+            "gold": cls._pick_obs_value(alpha_payload.get("gold")),
+            "wti": cls._pick_obs_value(alpha_payload.get("wti")),
+            "brent": cls._pick_obs_value(alpha_payload.get("brent")),
+            "copper": cls._pick_obs_value(alpha_payload.get("copper")),
+            "vix": cls._pick_obs_value(fred_payload.get("vix")),
+            "spx": cls._pick_obs_value(fred_payload.get("spx")),
+            "nasdaq_100": cls._pick_obs_value(fred_payload.get("nasdaq_100")),
+            "source": cls._build_source_note(fred_payload, alpha_payload),
+            "fetched_at": now_text(),
+        }
 
     def fetch_series(self, field_name: str, limit: int = 250) -> list[dict[str, Any]]:
         if field_name not in OVERSEAS_NUMERIC_FIELDS:

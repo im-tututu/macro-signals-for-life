@@ -4,10 +4,10 @@ import datetime as dt
 from typing import Any, Dict, Iterable, Optional
 from urllib.parse import urlencode
 
-from core.models import BondIndexSnapshot
-from core.utils import to_float
+from src.core.models import BondIndexSnapshot
+from src.core.utils import to_float
 
-from .base import BaseSource
+from .base import BaseSource, FetchResult
 
 CHINABOND_INDEX_SINGLE_QUERY_URL = "https://yield.chinabond.com.cn/cbweb-mn/indices/singleIndexQueryResult"
 CSI_BOND_FEATURE_URL = "https://www.csindex.com.cn/csindex-home/perf/get-bond-index-feature/{code}"
@@ -16,6 +16,11 @@ TZ_SH = dt.timezone(dt.timedelta(hours=8))
 
 
 class ChinaBondIndexSource(BaseSource):
+    """中债指数特征来源。
+
+    当前 Python 侧先统一单指数抓取能力。
+    """
+
     def fetch_chinabond_index_series(
         self,
         index_id: str,
@@ -92,6 +97,25 @@ class ChinaBondIndexSource(BaseSource):
             convexity=convexity["value"] if convexity else None,
             source=CHINABOND_INDEX_SINGLE_QUERY_URL,
             meta={"raw_keys": list(payload.keys())},
+        )
+
+    def fetch_duration_snapshot_result(
+        self,
+        index_id: str,
+        *,
+        index_name: str | None = None,
+        index_code: str | None = None,
+    ) -> FetchResult[BondIndexSnapshot]:
+        """统一返回单指数抓取结果。"""
+
+        return FetchResult(
+            payload=self.fetch_duration_snapshot(index_id),
+            source_url=CHINABOND_INDEX_SINGLE_QUERY_URL,
+            meta={
+                "provider": "CHINABOND",
+                "index_name": index_name or index_id,
+                "index_code": index_code or index_id,
+            },
         )
 
     def fetch_csindex_bond_feature(self, code: str) -> Dict[str, Any]:

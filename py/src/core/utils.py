@@ -6,7 +6,10 @@ import re
 from html import unescape
 from typing import Any, Iterable, Optional
 
-from dateutil import parser as date_parser
+try:
+    from dateutil import parser as date_parser
+except Exception:  # noqa: BLE001
+    date_parser = None
 
 TZ_SH = dt.timezone(dt.timedelta(hours=8))
 
@@ -35,14 +38,16 @@ def norm_ymd(value: Any) -> str:
         return ""
     text = text.replace("年", "-").replace("月", "-").replace("日", "")
     text = text.replace("/", "-").replace(".", "-")
-    try:
-        return date_parser.parse(text).date().strftime("%Y-%m-%d")
-    except Exception:
-        m = re.search(r"(20\d{2})[-](\d{1,2})[-](\d{1,2})", text)
-        if not m:
-            return text
-        y, mo, day = m.groups()
-        return f"{int(y):04d}-{int(mo):02d}-{int(day):02d}"
+    if date_parser is not None:
+        try:
+            return date_parser.parse(text).date().strftime("%Y-%m-%d")
+        except Exception:
+            pass
+    m = re.search(r"(20\d{2})[-](\d{1,2})[-](\d{1,2})", text)
+    if not m:
+        return text
+    y, mo, day = m.groups()
+    return f"{int(y):04d}-{int(mo):02d}-{int(day):02d}"
 
 
 def strip_tags(text: str) -> str:

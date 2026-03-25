@@ -68,19 +68,40 @@ class MultiNotifier:
         for notifier in self.notifiers:
             notifier.notify(title, body, level=level)
 
+def _resolve_bark_base_url(bark_url: str, device_key: str | None) -> str | None:
+    """把 Bark 配置整理成最终可请求的 base url。"""
 
+    value = (bark_url or "").strip()
+    if not value:
+        return None
+
+    parsed = urllib.parse.urlparse(value)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return None
+
+    path = parsed.path.rstrip("/")
+    if path:
+        return urllib.parse.urlunparse(parsed._replace(path=path, params="", query="", fragment=""))
+
+    if not device_key:
+        return None
+
+    device_path = f"/{device_key.strip().strip('/')}"
+    return urllib.parse.urlunparse(parsed._replace(path=device_path, params="", query="", fragment=""))
 
 def build_notifier(logger: logging.Logger) -> Notifier:
     cfg = AppConfig.load()
     notifiers: list[Notifier] = [ConsoleNotifier(logger=logger)]
     bark_url = cfg.bark_url or os.getenv("BARK_URL", "").strip()
-    if bark_url:
+    bark_base_url = _resolve_bark_base_url(bark_url, cfg.bark_device_key)
+    if bark_base_url:
         notifiers.append(
             BarkNotifier(
-                base_url=bark_url,
+                base_url=bark_base_url,
                 group=cfg.bark_group,
-                device_key=cfg.bark_device_key,
                 logger=logger,
             )
         )
+    elif bark_url:
+        logger.info("Bark 未启用：请提供完整的 Bark URL，或同时配置 BARK_BASE_URL 与 BARK_DEVICE_KEY。")
     return MultiNotifier(notifiers=notifiers)

@@ -103,6 +103,13 @@ class BaseSqliteStore:
         self._table_columns = None
 
     # -----------------------------
+    # Source -> row 映射
+    # -----------------------------
+    # 默认 store 不强制实现。
+    # 对于“source 先返回领域对象，再由 store 负责映射表行”的场景，
+    # 具体子类可自行增加 build_row_from_* 方法。
+
+    # -----------------------------
     # Read helpers
     # -----------------------------
     def fetch_latest_date(self, **filters: object) -> str | None:

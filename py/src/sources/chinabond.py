@@ -1,20 +1,48 @@
 from __future__ import annotations
 
+import random
 import re
+import time
 from typing import Dict, Iterable, List, Optional
 
-from bs4 import BeautifulSoup
+try:
+    from bs4 import BeautifulSoup
+except ImportError:  # pragma: no cover - optional dependency guard
+    BeautifulSoup = None
 
-from core.config import CURVES, TERMS
-from core.models import CurveBlock, CurveSnapshot, CurveSpec
-from core.utils import strip_tags
+from src.core.config import CURVES, TERMS, settings
+from src.core.models import CurveBlock, CurveSnapshot, CurveSpec
+from src.core.utils import strip_tags
 
-from .base import BaseSource
+from .base import BaseSource, FetchResult
 
 CHINABOND_YC_DETAIL_URL = "https://yield.chinabond.com.cn/cbweb-mn/yc/ycDetail"
+CHINABOND_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+    "Referer": "https://yield.chinabond.com.cn/",
+    "Origin": "https://yield.chinabond.com.cn",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+    "Connection": "keep-alive",
+}
+
+
+def _require_bs4() -> None:
+    """需要解析 HTML 时再检查可选依赖，避免 import 阶段直接失败。"""
+
+    if BeautifulSoup is None:
+        raise RuntimeError("缺少依赖 beautifulsoup4，请先执行 `pip install -r py/requirements.txt`。")
 
 
 class ChinaBondSource(BaseSource):
+    """中债收益率曲线来源。
+
+    source 层只负责：
+    - 调用中债接口
+    - 解析 block
+    - 产出曲线快照列表
+    """
+
     def fetch_curve_html(self, work_time: str, yc_def_ids: Iterable[str]) -> str:
         payload = {
             "ycDefIds": ",".join(yc_def_ids),
@@ -27,7 +55,26 @@ class ChinaBondSource(BaseSource):
             "wrjxCBFlag": "0",
             "locale": "zh_CN",
         }
-        return self.http.post_text(CHINABOND_YC_DETAIL_URL, data=payload, headers={"User-Agent": "Mozilla/5.0"})
+        last_exc: Exception | None = None
+        attempts = max(settings.http_retry_count, 2) + 1
+        for attempt in range(1, attempts + 1):
+            try:
+                text = self.http.post_text(
+                    CHINABOND_YC_DETAIL_URL,
+                    data=payload,
+                    headers=CHINABOND_HEADERS,
+                    retries=0,
+                )
+                if not text or len(text) < 500:
+                    raise RuntimeError(f"中债响应内容异常，长度过短: {len(text) if text is not None else 0}")
+                return text
+            except Exception as exc:  # noqa: BLE001
+                last_exc = exc
+                if attempt >= attempts:
+                    break
+                sleep_seconds = min(8.0, 1.2 * attempt) + random.uniform(0.2, 0.8)
+                time.sleep(sleep_seconds)
+        raise RuntimeError(f"抓取中债曲线失败 date={work_time} err={last_exc}") from last_exc
 
     @staticmethod
     def build_curve_title_key(text: str) -> str:
@@ -68,6 +115,7 @@ class ChinaBondSource(BaseSource):
 
     @staticmethod
     def parse_table_list_to_map(table_html: str) -> Dict[float, float]:
+        _require_bs4()
         soup = BeautifulSoup(table_html, "lxml")
         out: Dict[float, float] = {}
         for row in soup.select("tr"):
@@ -123,6 +171,7 @@ class ChinaBondSource(BaseSource):
         return None
 
     def fetch_curve_separately(self, date: str, curve: CurveSpec) -> Optional[CurveBlock]:
+        time.sleep(random.uniform(0.15, 0.35))
         html = self.fetch_curve_html(date, [curve.id])
         blocks = self.parse_curve_blocks(html)
         if not blocks:
@@ -134,7 +183,6 @@ class ChinaBondSource(BaseSource):
     def fetch_daily_wide(self, date: str, curves: Optional[List[CurveSpec]] = None) -> List[CurveSnapshot]:
         curves = curves or CURVES
         batch_curves = [c for c in curves if not c.fetch_separately]
-        single_curves = [c for c in curves if c.fetch_separately]
 
         batch_blocks: List[CurveBlock] = []
         if batch_curves:
@@ -162,6 +210,15 @@ class ChinaBondSource(BaseSource):
                 )
             )
         return out
+
+    def fetch_daily_wide_result(self, date: str, curves: Optional[List[CurveSpec]] = None) -> FetchResult[List[CurveSnapshot]]:
+        """统一返回 FetchResult，便于 job 层复用通用编排逻辑。"""
+
+        return FetchResult(
+            payload=self.fetch_daily_wide(date, curves=curves),
+            source_url=CHINABOND_YC_DETAIL_URL,
+            meta={"date": date},
+        )
 
     @staticmethod
     def flatten_curve(snapshot: CurveSnapshot) -> Dict[str, object]:

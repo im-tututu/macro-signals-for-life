@@ -4,23 +4,43 @@ import re
 from typing import Iterable, List, Optional
 from urllib.parse import urljoin
 
-from bs4 import BeautifulSoup
+try:
+    from bs4 import BeautifulSoup
+except ImportError:  # pragma: no cover - optional dependency guard
+    BeautifulSoup = None
 
-from core.models import PolicyRateEvent
-from core.utils import now_text, norm_ymd, to_float
+from src.core.models import PolicyRateEvent
+from src.core.utils import now_text, norm_ymd, to_float
 
-from .base import BaseSource
+from .base import BaseSource, FetchResult
 
 PBC_OMO_LIST_URL = "https://www.pbc.gov.cn/zhengcehuobisi/125207/125213/125431/125475/index.html"
+PBC_MLF_LIST_URL = "https://www.pbc.gov.cn/zhengcehuobisi/125207/125213/125437/125446/125873/index.html"
+PBC_LPR_LIST_URL = "https://www.pbc.gov.cn/zhengcehuobisi/125207/125213/125440/3876551/index.html"
 PBC_OMO_ARTICLE_HINT = "公开市场业务交易公告"
 
 
+def _require_bs4() -> None:
+    """需要解析 HTML 时再检查可选依赖，避免 import 阶段直接失败。"""
+
+    if BeautifulSoup is None:
+        raise RuntimeError("缺少依赖 beautifulsoup4，请先执行 `pip install -r py/requirements.txt`。")
+
+
 class PbcSource(BaseSource):
+    """央行政策利率来源。
+
+    当前 Python 侧先收口已有能力：
+    - 公开市场操作 OMO 事件
+    - MLF / LPR 的正文解析能力已在文件内，但列表入口后续再补齐
+    """
+
     def fetch_html(self, url: str) -> str:
         return self.http.get_text(url, headers={"User-Agent": "Mozilla/5.0"})
 
     def extract_links(self, list_url: str, keyword: str = "") -> List[dict]:
         html = self.fetch_html(list_url)
+        _require_bs4()
         soup = BeautifulSoup(html, "lxml")
         out: List[dict] = []
         for a in soup.select("a[href]"):
@@ -47,15 +67,26 @@ class PbcSource(BaseSource):
         return unique
 
     @staticmethod
+    def _sort_events_desc(events: Iterable[PolicyRateEvent]) -> List[PolicyRateEvent]:
+        return sorted(
+            events,
+            key=lambda item: (item.date or "", item.type or "", item.term or ""),
+            reverse=True,
+        )
+
+    @staticmethod
     def _normalize_text(text: str) -> str:
         text = text.replace("\u3000", " ").replace("&nbsp;", " ")
         text = text.replace("％", "%").replace("﹪", "%")
         text = text.replace("／", "/").replace("－", "-")
         text = re.sub(r"\s+", " ", text)
+        # PBC 表格正文里常把小数拆成 "1. 40 %"，这里先归一回标准写法。
+        text = re.sub(r"(\d)\s*\.\s*(\d)", r"\1.\2", text)
         return text.strip()
 
     @staticmethod
     def _extract_article_text(html: str) -> str:
+        _require_bs4()
         soup = BeautifulSoup(html, "lxml")
         selectors = [
             "#zoom",
@@ -119,6 +150,20 @@ class PbcSource(BaseSource):
         return to_float(m.group(1)) if m else None
 
     @staticmethod
+    def _normalize_rate_value(value: Optional[float]) -> Optional[float]:
+        """把政策利率统一到百分比口径。
+
+        例如正则偶发地从 `1.40%` 里截出 `40`，这里兜底修正回 `1.40`。
+        当前政策利率通常远小于 10%，因此大于 10 的值都按百分位回退两位。
+        """
+
+        if value is None:
+            return None
+        if value > 10:
+            return round(value / 100, 4)
+        return value
+
+    @staticmethod
     def _clean_term(term: str) -> str:
         term = re.sub(r"\s+", "", term)
         return (
@@ -130,16 +175,34 @@ class PbcSource(BaseSource):
             .replace("年", "Y")
         )
 
+    @staticmethod
+    def _is_valid_event_date(value: str) -> bool:
+        return bool(re.fullmatch(r"20\d{2}-\d{2}-\d{2}", str(value or "").strip()))
+
+    @classmethod
+    def _extract_event_date(cls, title: str, text: str, url: str) -> str:
+        """优先返回真正可用的业务日期。"""
+
+        for candidate in (norm_ymd(title), norm_ymd(text)):
+            if cls._is_valid_event_date(candidate):
+                return candidate
+
+        url_match = re.search(r"(20\d{2})(\d{2})(\d{2})", url or "")
+        if url_match:
+            year, month, day = url_match.groups()
+            return f"{year}-{month}-{day}"
+        return ""
+
     def _parse_omo(self, text: str, event_date: str, amount: Optional[float], url: str, fetched_at: str, title: str) -> List[PolicyRateEvent]:
         out: List[PolicyRateEvent] = []
 
         patterns = [
             # narrative sentence: 开展了175亿元7天期逆回购操作... 1.40%
-            r"([0-9]+(?:\.[0-9]+)?)\s*亿元\s*(7\s*天|14\s*天|28\s*天)期?逆回购.*?([0-9]+(?:\.[0-9]+)?)\s*[%％]",
+            r"([0-9]+(?:\.[0-9]+)?)\s*亿元\s*(7\s*天|14\s*天|28\s*天)期?逆回购.*?(?<![\d.])([0-9]+(?:\.[0-9]+)?)(?![\d.])\s*[%％]",
             # table/body text: 7 天 1.40% 175 亿元
-            r"(7\s*天|14\s*天|28\s*天)\s*.*?([0-9]+(?:\.[0-9]+)?)\s*[%％]\s*.*?([0-9]+(?:\.[0-9]+)?)\s*亿元",
+            r"(7\s*天|14\s*天|28\s*天)\s*.*?(?<![\d.])([0-9]+(?:\.[0-9]+)?)(?![\d.])\s*[%％]\s*.*?([0-9]+(?:\.[0-9]+)?)\s*亿元",
             # looser fallback
-            r"(7\s*天|14\s*天|28\s*天).*?([0-9]+(?:\.[0-9]+)?)\s*[%％]",
+            r"(7\s*天|14\s*天|28\s*天).*?(?<![\d.])([0-9]+(?:\.[0-9]+)?)(?![\d.])\s*[%％]",
         ]
 
         for patt in patterns:
@@ -153,7 +216,18 @@ class PbcSource(BaseSource):
                 else:
                     term, rate = tup
                     amt_v = amount
-                out.append(PolicyRateEvent(event_date, "OMO", self._clean_term(term), to_float(rate), amt_v or amount, url, fetched_at, title))
+                out.append(
+                    PolicyRateEvent(
+                        event_date,
+                        "OMO",
+                        self._clean_term(term),
+                        self._normalize_rate_value(to_float(rate)),
+                        amt_v or amount,
+                        url,
+                        fetched_at,
+                        title,
+                    )
+                )
             if out:
                 return self._dedupe(out)
         return []
@@ -161,22 +235,44 @@ class PbcSource(BaseSource):
     def _parse_mlf(self, text: str, event_date: str, amount: Optional[float], url: str, fetched_at: str, title: str) -> List[PolicyRateEvent]:
         out: List[PolicyRateEvent] = []
         patterns = [
-            r"(1\s*年|6\s*个月|3\s*个月).*?([0-9]+(?:\.[0-9]+)?)\s*[%％]",
+            r"(1\s*年|6\s*个月|3\s*个月).*?(?<![\d.])([0-9]+(?:\.[0-9]+)?)(?![\d.])\s*[%％]",
         ]
         for patt in patterns:
             for term, rate in re.findall(patt, text, flags=re.I):
-                out.append(PolicyRateEvent(event_date, "MLF", self._clean_term(term), to_float(rate), amount, url, fetched_at, title))
+                out.append(
+                    PolicyRateEvent(
+                        event_date,
+                        "MLF",
+                        self._clean_term(term),
+                        self._normalize_rate_value(to_float(rate)),
+                        amount,
+                        url,
+                        fetched_at,
+                        title,
+                    )
+                )
         return self._dedupe(out)
 
     def _parse_lpr(self, text: str, event_date: str, url: str, fetched_at: str, title: str) -> List[PolicyRateEvent]:
         out: List[PolicyRateEvent] = []
         patterns = [
-            r"(1\s*年期|5\s*年期)\s*LPR\s*(?:为)?\s*([0-9]+(?:\.[0-9]+)?)\s*[%％]",
-            r"(1\s*年期|5\s*年期).*?([0-9]+(?:\.[0-9]+)?)\s*[%％]",
+            r"(1\s*年期|5\s*年期)\s*LPR\s*(?:为)?\s*(?<![\d.])([0-9]+(?:\.[0-9]+)?)(?![\d.])\s*[%％]",
+            r"(1\s*年期|5\s*年期).*?(?<![\d.])([0-9]+(?:\.[0-9]+)?)(?![\d.])\s*[%％]",
         ]
         for patt in patterns:
             for term, rate in re.findall(patt, text, flags=re.I):
-                out.append(PolicyRateEvent(event_date, "LPR", self._clean_term(term), to_float(rate), None, url, fetched_at, title))
+                out.append(
+                    PolicyRateEvent(
+                        event_date,
+                        "LPR",
+                        self._clean_term(term),
+                        self._normalize_rate_value(to_float(rate)),
+                        None,
+                        url,
+                        fetched_at,
+                        title,
+                    )
+                )
             if out:
                 return self._dedupe(out)
         return []
@@ -184,7 +280,7 @@ class PbcSource(BaseSource):
     def parse_policy_events_from_html(self, html: str, url: str, title: str = "") -> List[PolicyRateEvent]:
         text = self._extract_article_text(html)
         event_type = self._detect_type(text, title, url)
-        event_date = norm_ymd(title) or norm_ymd(text) or ""
+        event_date = self._extract_event_date(title, text, url)
         amount = self._extract_amount(text)
         fetched_at = now_text()
 
@@ -208,6 +304,24 @@ class PbcSource(BaseSource):
             out.append(event)
         return out
 
+    @classmethod
+    def _pick_latest_event_group(cls, events: Iterable[PolicyRateEvent], event_type: str) -> List[PolicyRateEvent]:
+        """选出某一类政策事件的“最新一组”。
+
+        口径：
+        - 先取该类型里最新的业务日期
+        - 再保留这一天的全部事件
+        - 例如 LPR 会保留同一公告里的 1Y / 5Y 两条
+        - MLF / OMO 若同日有多期限，也一并保留
+        """
+
+        filtered = [event for event in cls._sort_events_desc(cls._dedupe(events)) if event.type == event_type and event.date]
+        if not filtered:
+            return []
+        latest_date = filtered[0].date
+        latest_group = [event for event in filtered if event.date == latest_date]
+        return cls._sort_events_desc(cls._dedupe(latest_group))
+
     def fetch_events_from_url(self, url: str, title: str = "") -> List[PolicyRateEvent]:
         html = self.fetch_html(url)
         return self.parse_policy_events_from_html(html, url, title)
@@ -217,4 +331,87 @@ class PbcSource(BaseSource):
         events: List[PolicyRateEvent] = []
         for item in links:
             events.extend(self.fetch_events_from_url(item["url"], item["title"]))
-        return self._dedupe(events)
+        return self._sort_events_desc(self._dedupe(events))
+
+    def fetch_recent_mlf_events(self, limit: int = 20) -> List[PolicyRateEvent]:
+        links = self.extract_links(PBC_MLF_LIST_URL)
+        picked = []
+        for item in links:
+            title = str(item.get("title") or "")
+            url = str(item.get("url") or "")
+            if "中期借贷便利开展情况" not in title:
+                continue
+            if "/125873/" not in url or url.endswith("/125873/index.html"):
+                continue
+            picked.append(item)
+            if len(picked) >= limit:
+                break
+
+        events: List[PolicyRateEvent] = []
+        for item in picked:
+            events.extend(self.fetch_events_from_url(item["url"], item["title"]))
+        only_mlf = [event for event in events if event.type == "MLF"]
+        return self._sort_events_desc(self._dedupe(only_mlf))[:limit]
+
+    def fetch_recent_lpr_events(self, limit: int = 20) -> List[PolicyRateEvent]:
+        links = self.extract_links(PBC_LPR_LIST_URL)
+        picked = []
+        for item in links:
+            title = str(item.get("title") or "")
+            url = str(item.get("url") or "")
+            if "贷款市场报价利率（LPR）公告" not in title and "贷款市场报价利率(LPR)公告" not in title:
+                continue
+            if "/3876551/" not in url or url.endswith("/3876551/index.html"):
+                continue
+            picked.append(item)
+            if len(picked) >= limit:
+                break
+
+        events: List[PolicyRateEvent] = []
+        for item in picked:
+            events.extend(self.fetch_events_from_url(item["url"], item["title"]))
+        only_lpr = [event for event in events if event.type == "LPR"]
+        return self._sort_events_desc(self._dedupe(only_lpr))[: limit * 2]
+
+    def fetch_latest_policy_rate_events(self) -> List[PolicyRateEvent]:
+        """抓取最新一组政策事件。
+
+        返回口径：
+        - OMO: 最新业务日的整组事件
+        - MLF: 最新业务日的整组事件
+        - LPR: 最新公告中的全部期限事件
+        """
+
+        events: List[PolicyRateEvent] = []
+        events.extend(self._pick_latest_event_group(self.fetch_recent_omo_events(limit=5), "OMO"))
+        events.extend(self._pick_latest_event_group(self.fetch_recent_mlf_events(limit=5), "MLF"))
+        events.extend(self._pick_latest_event_group(self.fetch_recent_lpr_events(limit=5), "LPR"))
+        return self._sort_events_desc(self._dedupe(events))
+
+    def fetch_recent_policy_rate_events_result(self, limit: int = 20) -> FetchResult[List[PolicyRateEvent]]:
+        """统一返回 FetchResult。
+
+        返回近期政策事件列表：
+        - OMO
+        - MLF
+        - LPR
+        """
+
+        events = []
+        events.extend(self.fetch_recent_omo_events(limit=limit))
+        events.extend(self.fetch_recent_mlf_events(limit=limit))
+        events.extend(self.fetch_recent_lpr_events(limit=limit))
+        return FetchResult(
+            payload=self._sort_events_desc(self._dedupe(events)),
+            source_url=PBC_OMO_LIST_URL,
+            meta={"provider": "PBC", "event_scope": "recent_all", "limit_per_type": limit},
+        )
+
+    def fetch_latest_policy_rate_events_result(self) -> FetchResult[List[PolicyRateEvent]]:
+        """统一返回最新政策事件结果。"""
+
+        return FetchResult(
+            payload=self.fetch_latest_policy_rate_events(),
+            source_url=PBC_OMO_LIST_URL,
+            meta={"provider": "PBC", "event_scope": "latest"},
+        )

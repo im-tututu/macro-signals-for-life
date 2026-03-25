@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
+from src.core.models import CurveSpec
+
 # -----------------------------
 # 路径
 # -----------------------------
@@ -21,6 +23,7 @@ LOG_DIR: Final[Path] = DATA_DIR / "logs"
 EXPORT_DIR: Final[Path] = DATA_DIR / "exports"
 SNAPSHOT_DIR: Final[Path] = DATA_DIR / "snapshots"
 IMPORT_DIR: Final[Path] = DATA_DIR / "imports"
+REFERENCE_DIR: Final[Path] = DATA_DIR / "reference"
 DEFAULT_DB_PATH: Final[Path] = DATA_DIR / "db.sqlite"
 DEFAULT_INIT_SQL_PATH: Final[Path] = SQL_DIR / "0001_init.sql"
 DEFAULT_WORKBOOK_NAME: Final[str] = "宏观观察.xlsx"
@@ -166,6 +169,38 @@ CURVE_VALUE_COLUMNS: Final[list[str]] = [
     "y_40",
     "y_50",
 ]
+TERMS: Final[list[float]] = [float(term) for term in CURVE_TERMS]
+CURVES: Final[list[CurveSpec]] = [
+    CurveSpec(name="国债", id="2c9081e50a2f9606010a3068cae70001", tier="main", aliases=["国债收益率曲线", "Government Bond"]),
+    CurveSpec(name="国开债", id="8a8b2ca037a7ca910137bfaa94fa5057", tier="main", aliases=["国开债收益率曲线", "政策性金融债", "Policy Bank"]),
+    CurveSpec(name="AAA信用", id="2c9081e50a2f9606010a309f4af50111", tier="main", aliases=["企业债收益率曲线(AAA)", "企业债AAA", "Enterprise Bond AAA"]),
+    CurveSpec(name="AA+信用", id="2c908188138b62cd01139a2ee6b51e25", tier="main", aliases=["企业债收益率曲线(AA+)", "企业债收益率曲线(AA＋)", "企业债AA+", "Enterprise Bond AA+"]),
+    CurveSpec(name="AAA+中票", id="2c9081e9257ddf2a012590efdded1d35", tier="main", aliases=["中短期票据收益率曲线(AAA+)", "中票AAA+", "CP&Note AAA+"]),
+    CurveSpec(name="AAA中票", id="2c9081880fa9d507010fb8505b393fe7", tier="main", aliases=["中短期票据收益率曲线(AAA)", "中票AAA", "CP&Note AAA"]),
+    CurveSpec(name="AAA存单", id="8308218D1D030E0DE0540010E03EE6DA", tier="main", aliases=["同业存单收益率曲线(AAA)", "存单AAA", "NCD AAA", "Negotiable CD AAA"]),
+    CurveSpec(name="AAA城投", id="2c9081e91b55cc84011be3c53b710598", tier="extended", aliases=["城投债收益率曲线(AAA)", "城投AAA", "LGFV AAA"]),
+    CurveSpec(name="AAA银行债", id="2c9081e9259b766a0125be8b5115149f", tier="extended", aliases=["商业银行普通债收益率曲线(AAA)", "商业银行债收益率曲线(AAA)", "银行债AAA", "Financial Bond of Commercial Bank AAA"]),
+    CurveSpec(name="地方债", id="998183ff8c00f640018c32d4721a0d16", tier="short_history", fetch_separately=True, aliases=["地方政府债收益率曲线", "地方政府债", "Local Government"]),
+]
+OVERSEAS_MACRO_FRED_SERIES: Final[dict[str, str]] = {
+    "fed_upper": "DFEDTARU",
+    "fed_lower": "DFEDTARL",
+    "sofr": "SOFR",
+    "ust_2y": "DGS2",
+    "ust_10y": "DGS10",
+    "us_real_10y": "DFII10",
+    "usd_broad": "DTWEXBGS",
+    "usd_cny": "DEXCHUS",
+    "vix": "VIXCLS",
+    "spx": "SP500",
+    "nasdaq_100": "NASDAQ100",
+}
+OVERSEAS_MACRO_ALPHA_SERIES: Final[dict[str, dict[str, str]]] = {
+    "gold": {"fn": "GOLD_SILVER_HISTORY", "symbol": "GOLD", "interval": "daily"},
+    "wti": {"fn": "WTI", "interval": "daily"},
+    "brent": {"fn": "BRENT", "interval": "daily"},
+    "copper": {"fn": "COPPER", "interval": "monthly"},
+}
 
 # -----------------------------
 # 导入时的 sheet / 表头兼容规则
@@ -320,7 +355,7 @@ def find_default_workbook() -> Path | None:
 
 
 def ensure_runtime_dirs() -> None:
-    for path in [DATA_DIR, LOG_DIR, EXPORT_DIR, SNAPSHOT_DIR, IMPORT_DIR, SQL_DIR]:
+    for path in [DATA_DIR, LOG_DIR, EXPORT_DIR, SNAPSHOT_DIR, IMPORT_DIR, REFERENCE_DIR, SQL_DIR]:
         path.mkdir(parents=True, exist_ok=True)
 
 
@@ -337,6 +372,7 @@ def as_dict(config: AppConfig | None = None) -> dict[str, str | None]:
         "repo_root": str(REPO_ROOT),
         "py_root": str(PY_ROOT),
         "data_dir": str(DATA_DIR),
+        "reference_dir": str(REFERENCE_DIR),
         "db_path": str(cfg.db_path),
         "init_sql_path": str(cfg.init_sql_path),
         "workbook_path": str(cfg.workbook_path) if cfg.workbook_path else None,
@@ -349,3 +385,30 @@ def as_dict(config: AppConfig | None = None) -> dict[str, str | None]:
         "bark_url": cfg.bark_url,
         "bark_group": cfg.bark_group,
     }
+
+
+@dataclass(frozen=True)
+class RuntimeSettings:
+    http_timeout_seconds: float = 20.0
+    http_retry_count: int = 2
+    http_retry_sleep_seconds: float = 1.0
+    fred_api_key: str = ""
+    alpha_vantage_api_key: str = ""
+    jisilu_cookie: str = ""
+    jisilu_user_agent: str = "Mozilla/5.0"
+
+    @classmethod
+    def load(cls) -> "RuntimeSettings":
+        load_local_env()
+        return cls(
+            http_timeout_seconds=float(_env_text("HTTP_TIMEOUT_SECONDS", "MSFL_HTTP_TIMEOUT_SECONDS") or 20.0),
+            http_retry_count=int(_env_text("HTTP_RETRY_COUNT", "MSFL_HTTP_RETRY_COUNT") or 2),
+            http_retry_sleep_seconds=float(_env_text("HTTP_RETRY_SLEEP_SECONDS", "MSFL_HTTP_RETRY_SLEEP_SECONDS") or 1.0),
+            fred_api_key=_env_text("FRED_API_KEY", "MSFL_FRED_API_KEY") or "",
+            alpha_vantage_api_key=_env_text("ALPHA_VANTAGE_API_KEY", "MSFL_ALPHA_VANTAGE_API_KEY") or "",
+            jisilu_cookie=_env_text("JISILU_COOKIE", "MSFL_JISILU_COOKIE") or "",
+            jisilu_user_agent=_env_text("JISILU_USER_AGENT", "MSFL_JISILU_USER_AGENT") or "Mozilla/5.0",
+        )
+
+
+settings = RuntimeSettings.load()
