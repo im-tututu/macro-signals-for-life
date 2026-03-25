@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import os
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Optional, Sequence
+from typing import Sequence
 
 import gspread
 from google.oauth2.service_account import Credentials
+
+from src.core.config import AppConfig, getenv_first, load_local_env
 
 
 SCOPES = [
@@ -15,104 +15,10 @@ SCOPES = [
 ]
 
 
-def _parse_bool(value: str | None, default: bool = False) -> bool:
-    if value is None:
-        return default
-    return value.strip().lower() in {"1", "true", "yes", "y", "on"}
-
-
-def _candidate_env_files() -> list[Path]:
-    cwd = Path.cwd().resolve()
-    here = Path(__file__).resolve()
-
-    candidates: list[Path] = []
-    # Current working directory and its parents.
-    for p in [cwd, *cwd.parents]:
-        candidates.append(p / ".env")
-
-    # Script/module location and a few parents.
-    # Typical layouts:
-    #   repo/py/src/outputs/sheets.py
-    #   repo/py/scripts/*.py
-    for p in [here.parent, *here.parents]:
-        candidates.append(p / ".env")
-
-    # De-duplicate while preserving order.
-    seen: set[str] = set()
-    ordered: list[Path] = []
-    for c in candidates:
-        s = str(c)
-        if s not in seen:
-            seen.add(s)
-            ordered.append(c)
-    return ordered
-
-
-def load_env_file(path: Path, *, override: bool = False) -> dict[str, str]:
-    loaded: dict[str, str] = {}
-    if not path.exists():
-        return loaded
-
-    for raw_line in path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#"):
-            continue
-        if "=" not in line:
-            continue
-
-        key, value = line.split("=", 1)
-        key = key.strip()
-        value = value.strip()
-
-        # Remove optional surrounding quotes.
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
-            value = value[1:-1]
-
-        loaded[key] = value
-        if override or key not in os.environ:
-            os.environ[key] = value
-
-    return loaded
-
-
-def load_local_env(*, override: bool = False, env_file: str | Path | None = None) -> Path | None:
-    if env_file:
-        path = Path(env_file).expanduser().resolve()
-        if path.exists():
-            load_env_file(path, override=override)
-            return path
-        return None
-
-    for candidate in _candidate_env_files():
-        if candidate.exists():
-            load_env_file(candidate, override=override)
-            return candidate
-
-    return None
-
-
-def getenv_first(*keys: str) -> str | None:
-    for key in keys:
-        value = os.environ.get(key)
-        if value:
-            return value
-    return None
-
-
-@dataclass
-class GoogleSheetsConfig:
-    credentials_path: str
-    spreadsheet_id: str
-
-
 class GoogleSheetsWriter:
-    """Small wrapper around gspread for replacing worksheet content.
+    """基于 gspread 的轻量封装，用于整表替换工作表内容。
 
-    Defaults can come from environment variables:
-    - GOOGLE_APPLICATION_CREDENTIALS
-    - GOOGLE_SPREADSHEET_ID
-
-    A local .env file is auto-loaded if present.
+    默认配置来自 AppConfig / 本地 .env。
     """
 
     def __init__(
@@ -123,19 +29,22 @@ class GoogleSheetsWriter:
         env_file: str | Path | None = None,
     ) -> None:
         load_local_env(env_file=env_file)
+        cfg = AppConfig.load()
 
-        resolved_credentials = credentials_path or getenv_first("GOOGLE_APPLICATION_CREDENTIALS")
-        resolved_spreadsheet_id = spreadsheet_id or getenv_first("GOOGLE_SPREADSHEET_ID")
+        resolved_credentials = credentials_path or (
+            str(cfg.google_credentials_path) if cfg.google_credentials_path else None
+        )
+        resolved_spreadsheet_id = spreadsheet_id or cfg.spreadsheet_id or getenv_first("GOOGLE_SPREADSHEET_ID")
 
         if not resolved_credentials:
             raise ValueError(
-                "Google credentials path not provided. Set GOOGLE_APPLICATION_CREDENTIALS "
-                "in .env/environment or pass credentials_path explicitly."
+                "未提供 Google 凭证路径。请在 .env / 环境变量中设置 "
+                "GOOGLE_APPLICATION_CREDENTIALS，或显式传入 credentials_path。"
             )
         if not resolved_spreadsheet_id:
             raise ValueError(
-                "Google spreadsheet id not provided. Set GOOGLE_SPREADSHEET_ID "
-                "in .env/environment or pass spreadsheet_id explicitly."
+                "未提供 Google Spreadsheet ID。请在 .env / 环境变量中设置 "
+                "GOOGLE_SPREADSHEET_ID，或显式传入 spreadsheet_id。"
             )
 
         creds = Credentials.from_service_account_file(resolved_credentials, scopes=SCOPES)

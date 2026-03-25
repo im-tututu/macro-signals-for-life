@@ -6,10 +6,10 @@ from pathlib import Path
 from typing import Final
 
 # -----------------------------
-# Paths
+# 路径
 # -----------------------------
-# py/src/core/config.py -> parents:
-# 0 core, 1 src, 2 py, 3 repo root
+# py/src/core/config.py 的父级层级：
+# 0 core, 1 src, 2 py, 3 仓库根目录
 PY_ROOT: Final[Path] = Path(__file__).resolve().parents[2]
 REPO_ROOT: Final[Path] = Path(__file__).resolve().parents[3]
 SRC_ROOT: Final[Path] = PY_ROOT / "src"
@@ -31,19 +31,23 @@ WORKBOOK_CANDIDATES: Final[list[Path]] = [
 ]
 
 # -----------------------------
-# Environment variable names
+# 环境变量名
 # -----------------------------
-ENV_DB_PATH: Final[str] = "MSFL_DB_PATH"
-ENV_INIT_SQL_PATH: Final[str] = "MSFL_INIT_SQL_PATH"
-ENV_WORKBOOK_PATH: Final[str] = "MSFL_WORKBOOK_PATH"
-ENV_GSHEET_SPREADSHEET_ID: Final[str] = "MSFL_GSHEET_SPREADSHEET_ID"
-ENV_LOG_LEVEL: Final[str] = "MSFL_LOG_LEVEL"
-ENV_BARK_URL: Final[str] = "MSFL_BARK_URL"
-ENV_BARK_GROUP: Final[str] = "MSFL_BARK_GROUP"
-ENV_BARK_DEVICE_KEY: Final[str] = "MSFL_BARK_DEVICE_KEY"
+ENV_DB_PATH_KEYS: Final[tuple[str, ...]] = ("DB_PATH", "MSFL_DB_PATH", "SQLITE_DB_PATH")
+ENV_INIT_SQL_PATH_KEYS: Final[tuple[str, ...]] = ("INIT_SQL_PATH", "MSFL_INIT_SQL_PATH")
+ENV_WORKBOOK_PATH_KEYS: Final[tuple[str, ...]] = ("WORKBOOK_PATH", "MSFL_WORKBOOK_PATH")
+ENV_GSHEET_SPREADSHEET_ID_KEYS: Final[tuple[str, ...]] = ("GOOGLE_SPREADSHEET_ID", "MSFL_GSHEET_SPREADSHEET_ID")
+ENV_GSHEET_CREDENTIALS_PATH_KEYS: Final[tuple[str, ...]] = ("GOOGLE_APPLICATION_CREDENTIALS",)
+ENV_WORKSHEET_PREFIX_KEYS: Final[tuple[str, ...]] = ("GOOGLE_WORKSHEET_PREFIX",)
+ENV_EXPORT_LIMIT_PER_TABLE_KEYS: Final[tuple[str, ...]] = ("EXPORT_LIMIT_PER_TABLE",)
+ENV_EXPORT_INCLUDE_EMPTY_KEYS: Final[tuple[str, ...]] = ("EXPORT_INCLUDE_EMPTY",)
+ENV_LOG_LEVEL_KEYS: Final[tuple[str, ...]] = ("LOG_LEVEL", "MSFL_LOG_LEVEL")
+ENV_BARK_URL_KEYS: Final[tuple[str, ...]] = ("BARK_BASE_URL", "BARK_URL", "MSFL_BARK_URL")
+ENV_BARK_GROUP_KEYS: Final[tuple[str, ...]] = ("BARK_GROUP", "MSFL_BARK_GROUP")
+ENV_BARK_DEVICE_KEY_KEYS: Final[tuple[str, ...]] = ("BARK_DEVICE_KEY", "MSFL_BARK_DEVICE_KEY")
 
 # -----------------------------
-# Sheet names (keep aligned with current GAS workbook)
+# Sheet 名称（需与当前 GAS 工作簿保持一致）
 # -----------------------------
 SHEET_RUN_LOG: Final[str] = "运行日志"
 SHEET_BOND_CURVE_RAW: Final[str] = "原始_收益率曲线"
@@ -79,7 +83,7 @@ RAW_SHEET_NAMES: Final[list[str]] = [
 ]
 
 # -----------------------------
-# Table names
+# 数据表名
 # -----------------------------
 TABLE_INGEST_RUN: Final[str] = "ingest_run"
 TABLE_INGEST_ERROR: Final[str] = "ingest_error"
@@ -114,7 +118,7 @@ RAW_TABLES: Final[list[str]] = [
 ]
 
 # -----------------------------
-# Bond curve terms / columns
+# 债券收益率曲线期限 / 列名
 # -----------------------------
 CURVE_TERMS: Final[list[str]] = [
     "0",
@@ -164,7 +168,7 @@ CURVE_VALUE_COLUMNS: Final[list[str]] = [
 ]
 
 # -----------------------------
-# Import-time sheet/header quirks
+# 导入时的 sheet / 表头兼容规则
 # -----------------------------
 HEADER_SCAN_MAX_ROWS: Final[int] = 10
 BOND_INDEX_LIST_HEADER_MIN_HITS: Final[int] = 4
@@ -180,6 +184,10 @@ class AppConfig:
     init_sql_path: Path
     workbook_path: Path | None
     spreadsheet_id: str | None = None
+    google_credentials_path: Path | None = None
+    worksheet_prefix: str = ""
+    export_limit_per_table: int | None = None
+    export_include_empty: bool = False
     log_level: str = "INFO"
     bark_url: str | None = None
     bark_group: str | None = None
@@ -187,19 +195,28 @@ class AppConfig:
 
     @classmethod
     def load(cls) -> "AppConfig":
-        db_path = _env_path(ENV_DB_PATH) or DEFAULT_DB_PATH
-        init_sql_path = _env_path(ENV_INIT_SQL_PATH) or DEFAULT_INIT_SQL_PATH
-        workbook_path = _env_path(ENV_WORKBOOK_PATH) or find_default_workbook()
-        spreadsheet_id = _env_text(ENV_GSHEET_SPREADSHEET_ID)
-        log_level = (_env_text(ENV_LOG_LEVEL) or "INFO").upper()
-        bark_url = _env_text(ENV_BARK_URL)
-        bark_group = _env_text(ENV_BARK_GROUP)
-        bark_device_key = _env_text(ENV_BARK_DEVICE_KEY)
+        load_local_env()
+        db_path = _env_path(*ENV_DB_PATH_KEYS) or DEFAULT_DB_PATH
+        init_sql_path = _env_path(*ENV_INIT_SQL_PATH_KEYS) or DEFAULT_INIT_SQL_PATH
+        workbook_path = _env_path(*ENV_WORKBOOK_PATH_KEYS) or find_default_workbook()
+        spreadsheet_id = _env_text(*ENV_GSHEET_SPREADSHEET_ID_KEYS)
+        google_credentials_path = _env_path(*ENV_GSHEET_CREDENTIALS_PATH_KEYS)
+        worksheet_prefix = _env_text(*ENV_WORKSHEET_PREFIX_KEYS) or ""
+        export_limit_per_table = _env_int(*ENV_EXPORT_LIMIT_PER_TABLE_KEYS)
+        export_include_empty = _env_bool(*ENV_EXPORT_INCLUDE_EMPTY_KEYS, default=False)
+        log_level = (_env_text(*ENV_LOG_LEVEL_KEYS) or "INFO").upper()
+        bark_url = _env_text(*ENV_BARK_URL_KEYS)
+        bark_group = _env_text(*ENV_BARK_GROUP_KEYS)
+        bark_device_key = _env_text(*ENV_BARK_DEVICE_KEY_KEYS)
         return cls(
             db_path=db_path,
             init_sql_path=init_sql_path,
             workbook_path=workbook_path,
             spreadsheet_id=spreadsheet_id,
+            google_credentials_path=google_credentials_path,
+            worksheet_prefix=worksheet_prefix,
+            export_limit_per_table=export_limit_per_table,
+            export_include_empty=export_include_empty,
             log_level=log_level,
             bark_url=bark_url,
             bark_group=bark_group,
@@ -207,16 +224,92 @@ class AppConfig:
         )
 
 
-def _env_text(name: str) -> str | None:
-    value = os.getenv(name, "").strip()
-    return value or None
+def _candidate_env_files() -> list[Path]:
+    candidates = [
+        REPO_ROOT / ".env",
+        PY_ROOT / ".env",
+        Path.cwd().resolve() / ".env",
+    ]
+    seen: set[str] = set()
+    ordered: list[Path] = []
+    for candidate in candidates:
+        text = str(candidate)
+        if text not in seen:
+            seen.add(text)
+            ordered.append(candidate)
+    return ordered
 
 
-def _env_path(name: str) -> Path | None:
-    value = _env_text(name)
+def load_env_file(path: Path, *, override: bool = False) -> dict[str, str]:
+    loaded: dict[str, str] = {}
+    if not path.exists():
+        return loaded
+
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
+            value = value[1:-1]
+        loaded[key] = value
+        if override or key not in os.environ:
+            os.environ[key] = value
+    return loaded
+
+
+def load_local_env(*, override: bool = False, env_file: str | Path | None = None) -> Path | None:
+    if env_file:
+        path = Path(env_file).expanduser().resolve()
+        if path.exists():
+            load_env_file(path, override=override)
+            return path
+        return None
+
+    for candidate in _candidate_env_files():
+        if candidate.exists():
+            load_env_file(candidate, override=override)
+            return candidate
+    return None
+
+
+def getenv_first(*keys: str) -> str | None:
+    load_local_env()
+    for key in keys:
+        value = os.environ.get(key, "").strip()
+        if value:
+            return value
+    return None
+
+
+def _env_text(*names: str) -> str | None:
+    return getenv_first(*names)
+
+
+def _env_path(*names: str) -> Path | None:
+    value = _env_text(*names)
     if not value:
         return None
     return Path(value).expanduser().resolve()
+
+
+def _env_bool(*names: str, default: bool = False) -> bool:
+    value = _env_text(*names)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _env_int(*names: str) -> int | None:
+    value = _env_text(*names)
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        return None
 
 
 def find_default_workbook() -> Path | None:
@@ -248,6 +341,10 @@ def as_dict(config: AppConfig | None = None) -> dict[str, str | None]:
         "init_sql_path": str(cfg.init_sql_path),
         "workbook_path": str(cfg.workbook_path) if cfg.workbook_path else None,
         "spreadsheet_id": cfg.spreadsheet_id,
+        "google_credentials_path": str(cfg.google_credentials_path) if cfg.google_credentials_path else None,
+        "worksheet_prefix": cfg.worksheet_prefix,
+        "export_limit_per_table": str(cfg.export_limit_per_table) if cfg.export_limit_per_table is not None else None,
+        "export_include_empty": str(cfg.export_include_empty),
         "log_level": cfg.log_level,
         "bark_url": cfg.bark_url,
         "bark_group": cfg.bark_group,

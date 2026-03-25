@@ -3,20 +3,34 @@ from __future__ import annotations
 
 import argparse
 import sqlite3
+import sys
 from pathlib import Path
+
+try:
+    from src.core.config import AppConfig, load_local_env  # type: ignore
+except Exception:
+    CURRENT_DIR = Path(__file__).resolve().parent
+    PY_ROOT = CURRENT_DIR.parent
+    SRC_DIR = PY_ROOT / "src"
+    if str(SRC_DIR) not in sys.path:
+        sys.path.insert(0, str(SRC_DIR))
+    from core.config import AppConfig, load_local_env  # type: ignore
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Initialize SQLite database from SQL schema.")
+    load_local_env()
+    cfg = AppConfig.load()
+
+    parser = argparse.ArgumentParser(description="根据 SQL schema 初始化 SQLite 数据库。")
     parser.add_argument(
         "--db",
-        default="py/data/db.sqlite",
-        help="Path to SQLite database file. Default: py/data/db.sqlite",
+        default=str(cfg.db_path),
+        help="SQLite 数据库文件路径。默认读取 .env 中的 DB_PATH，或使用 py/data/db.sqlite。",
     )
     parser.add_argument(
         "--sql",
-        default="py/sql/0001_init_import_first.sql",
-        help="Path to SQL init script. Default: py/sql/0001_init_import_first.sql",
+        default=str(cfg.init_sql_path),
+        help="初始化 SQL 文件路径。默认读取 .env 中的 INIT_SQL_PATH，或使用 py/sql/0001_init.sql。",
     )
     return parser.parse_args()
 
@@ -48,9 +62,9 @@ def init_db(db_path: Path, sql_path: Path) -> None:
             """
         ).fetchall()
 
-        print(f"[OK] Initialized database: {db_path}")
-        print(f"[OK] Applied schema: {sql_path}")
-        print(f"[OK] Table count: {len(tables)}")
+        print(f"[OK] 已初始化数据库：{db_path}")
+        print(f"[OK] 已应用 schema：{sql_path}")
+        print(f"[OK] 数据表数量：{len(tables)}")
         for (name,) in tables:
             print(f"  - {name}")
     finally:

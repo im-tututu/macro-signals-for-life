@@ -53,3 +53,30 @@ flowchart TB
 - **环境信号**：识别资金面、信用环境和整体市场状态
 - **配置倾向**：给出长久期、中久期、短久期、高等级信用、信用下沉、现金等方向的提示性权重
 
+## Python 数据底座
+
+仓库中的 `py/` 目录是当前的数据底座，负责本地 SQLite、清洗审查、以及与 Google Sheets 的导入导出。
+
+### 配置
+
+- 本地实际配置文件使用仓库根目录下的 `.env`，示例见 `.env.example`
+- Python 侧优先读取以下变量名：
+  - `DB_PATH`
+  - `INIT_SQL_PATH`
+  - `WORKBOOK_PATH`
+  - `GOOGLE_APPLICATION_CREDENTIALS`
+  - `GOOGLE_SPREADSHEET_ID`
+- `MSFL_*` 变量名仍可读取，但只作为兼容别名，不再作为主要文档口径
+
+### 默认路径
+
+- SQLite：`py/data/db.sqlite`
+- 初始化 SQL：`py/sql/0001_init.sql`
+
+### 常用命令
+
+```bash
+python3 py/scripts/init_db.py
+python3 py/main.py review raw_policy_rate
+python3 py/scripts/export_all_raw_tables_to_sheet.py
+```

@@ -8,14 +8,21 @@ from pathlib import Path
 from typing import Sequence
 
 try:
+    from src.core.config import AppConfig  # type: ignore
     from src.outputs.sheets import GoogleSheetsWriter, getenv_first, load_local_env  # type: ignore
 except Exception:
     try:
+        from core.config import AppConfig  # type: ignore
         from sheets import GoogleSheetsWriter, getenv_first, load_local_env  # type: ignore
     except Exception:
         CURRENT_DIR = Path(__file__).resolve().parent
+        PY_ROOT = CURRENT_DIR.parent
+        SRC_DIR = PY_ROOT / "src"
+        if str(SRC_DIR) not in sys.path:
+            sys.path.insert(0, str(SRC_DIR))
         if str(CURRENT_DIR) not in sys.path:
             sys.path.insert(0, str(CURRENT_DIR))
+        from core.config import AppConfig  # type: ignore
         from sheets import GoogleSheetsWriter, getenv_first, load_local_env  # type: ignore
 
 
@@ -33,48 +40,49 @@ DEFAULT_WORKSHEET_MAP = {
 
 def parse_args() -> argparse.Namespace:
     load_local_env()
+    cfg = AppConfig.load()
 
     parser = argparse.ArgumentParser(
-        description="Export one SQLite table or SELECT query to Google Sheets."
+        description="将单张 SQLite 表或一条 SELECT 查询结果导出到 Google Sheets。"
     )
     parser.add_argument(
         "--db",
-        default=getenv_first("DB_PATH", "SQLITE_DB_PATH") or "py/data/db.sqlite",
-        help="Path to SQLite database. Default comes from DB_PATH or py/data/db.sqlite.",
+        default=str(cfg.db_path),
+        help="SQLite 数据库路径。默认读取 .env 中的 DB_PATH，或使用 py/data/db.sqlite。",
     )
     parser.add_argument(
         "--creds",
-        default=getenv_first("GOOGLE_APPLICATION_CREDENTIALS"),
-        help="Optional override for Google service account JSON. Default reads env/.env.",
+        default=str(cfg.google_credentials_path) if cfg.google_credentials_path else None,
+        help="可选的 Google service account JSON 路径覆盖值。默认从 .env 中读取。",
     )
     parser.add_argument(
         "--spreadsheet-id",
-        default=getenv_first("GOOGLE_SPREADSHEET_ID"),
-        help="Optional override for target spreadsheet id. Default reads env/.env.",
+        default=cfg.spreadsheet_id or getenv_first("GOOGLE_SPREADSHEET_ID"),
+        help="可选的目标 Spreadsheet ID 覆盖值。默认从 .env 中读取。",
     )
     parser.add_argument(
         "--worksheet",
         default=None,
-        help="Target worksheet/tab title. If omitted and --table is used, a default name mapping is applied.",
+        help="目标工作表名称。若省略且使用 --table，则按默认映射自动推断。",
     )
     group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument("--table", help="SQLite table name to export.")
-    group.add_argument("--query", help="Custom SELECT query to export.")
-    parser.add_argument("--limit", type=int, default=None, help="Optional LIMIT if using --table.")
+    group.add_argument("--table", help="要导出的 SQLite 表名。")
+    group.add_argument("--query", help="要导出的自定义 SELECT 查询。")
+    parser.add_argument("--limit", type=int, default=None, help="使用 --table 时可附加的 LIMIT。")
     parser.add_argument(
         "--order-by",
         default=None,
-        help="Optional ORDER BY clause without the keyword, e.g. 'date DESC'. Only for --table.",
+        help="使用 --table 时可附加的 ORDER BY 子句，不要写 ORDER BY 关键字，例如 'date DESC'。",
     )
     parser.add_argument(
         "--csv",
         default=None,
-        help="Optional CSV path for local preview/export before writing to sheet.",
+        help="可选的本地 CSV 输出路径，可在写入 Sheet 前先导出预览。",
     )
     parser.add_argument(
         "--env-file",
         default=None,
-        help="Optional explicit .env path. Normally auto-detected.",
+        help="可选的 .env 文件路径；默认会自动探测。",
     )
     return parser.parse_args()
 
@@ -116,7 +124,7 @@ def resolve_worksheet_title(table: str | None, worksheet: str | None) -> str:
         return DEFAULT_WORKSHEET_MAP[table]
     if table:
         return table
-    raise ValueError("worksheet title is required when using --query")
+    raise ValueError("使用 --query 时必须显式提供 worksheet 名称")
 
 
 def main() -> None:
@@ -148,8 +156,8 @@ def main() -> None:
     writer.replace_all(worksheet_title, rows)
 
     print(
-        f"Exported {max(len(rows) - 1, 0)} data rows "
-        f"to worksheet={worksheet_title!r} in spreadsheet={writer.spreadsheet_id!r}"
+        f"已导出 {max(len(rows) - 1, 0)} 行数据，"
+        f"写入 spreadsheet={writer.spreadsheet_id!r} 中的 worksheet={worksheet_title!r}"
     )
 
 

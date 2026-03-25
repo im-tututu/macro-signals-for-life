@@ -8,14 +8,21 @@ from pathlib import Path
 from typing import Sequence
 
 try:
+    from src.core.config import AppConfig  # type: ignore
     from src.outputs.sheets import GoogleSheetsWriter, getenv_first, load_local_env  # type: ignore
 except Exception:
     try:
+        from core.config import AppConfig  # type: ignore
         from sheets import GoogleSheetsWriter, getenv_first, load_local_env  # type: ignore
     except Exception:
         CURRENT_DIR = Path(__file__).resolve().parent
+        PY_ROOT = CURRENT_DIR.parent
+        SRC_DIR = PY_ROOT / "src"
+        if str(SRC_DIR) not in sys.path:
+            sys.path.insert(0, str(SRC_DIR))
         if str(CURRENT_DIR) not in sys.path:
             sys.path.insert(0, str(CURRENT_DIR))
+        from core.config import AppConfig  # type: ignore
         from sheets import GoogleSheetsWriter, getenv_first, load_local_env  # type: ignore
 
 
@@ -59,57 +66,58 @@ class ExportResult:
 
 def parse_args() -> argparse.Namespace:
     load_local_env()
+    cfg = AppConfig.load()
 
     parser = argparse.ArgumentParser(
-        description="Export current raw tables from SQLite into one Google Spreadsheet."
+        description="将当前 SQLite 中的 raw 表批量导出到一个 Google Spreadsheet。"
     )
     parser.add_argument(
         "--db",
-        default=getenv_first("DB_PATH", "SQLITE_DB_PATH") or "py/data/db.sqlite",
-        help="Path to SQLite database. Default comes from DB_PATH or py/data/db.sqlite.",
+        default=str(cfg.db_path),
+        help="SQLite 数据库路径。默认读取 .env 中的 DB_PATH，或使用 py/data/db.sqlite。",
     )
     parser.add_argument(
         "--creds",
-        default=getenv_first("GOOGLE_APPLICATION_CREDENTIALS"),
-        help="Optional override for Google service account JSON. Default reads env/.env.",
+        default=str(cfg.google_credentials_path) if cfg.google_credentials_path else None,
+        help="可选的 Google service account JSON 路径覆盖值。默认从 .env 中读取。",
     )
     parser.add_argument(
         "--spreadsheet-id",
-        default=getenv_first("GOOGLE_SPREADSHEET_ID"),
-        help="Optional override for target spreadsheet id. Default reads env/.env.",
+        default=cfg.spreadsheet_id or getenv_first("GOOGLE_SPREADSHEET_ID"),
+        help="可选的目标 Spreadsheet ID 覆盖值。默认从 .env 中读取。",
     )
     parser.add_argument(
         "--prefix",
-        default=getenv_first("GOOGLE_WORKSHEET_PREFIX") or "",
-        help="Optional prefix added to every worksheet title, e.g. '验证_'.",
+        default=cfg.worksheet_prefix,
+        help="可选的工作表名前缀，例如 '验证_'。",
     )
     parser.add_argument(
         "--index-worksheet",
         default="导出目录",
-        help="Worksheet name for export summary/index.",
+        help="导出汇总目录所使用的工作表名称。",
     )
     parser.add_argument(
         "--limit-per-table",
         type=int,
-        default=int(getenv_first("EXPORT_LIMIT_PER_TABLE") or 0) or None,
-        help="Optional LIMIT applied to each table. Default exports all rows.",
+        default=cfg.export_limit_per_table,
+        help="每张表可选的 LIMIT；默认导出全部行。",
     )
     parser.add_argument(
         "--include-empty",
         action="store_true",
-        default=(getenv_first("EXPORT_INCLUDE_EMPTY") or "").strip().lower() in {"1", "true", "yes", "y", "on"},
-        help="Also create worksheets for empty tables.",
+        default=cfg.export_include_empty,
+        help="空表也创建对应工作表。",
     )
     parser.add_argument(
         "--tables",
         nargs="*",
         default=None,
-        help="Optional explicit subset of table names. Default exports all current raw_* plus configured extras.",
+        help="可选的显式表名子集。默认导出所有当前 raw_* 表以及额外配置表。",
     )
     parser.add_argument(
         "--env-file",
         default=None,
-        help="Optional explicit .env path. Normally auto-detected.",
+        help="可选的 .env 文件路径；默认会自动探测。",
     )
     return parser.parse_args()
 
@@ -201,7 +209,7 @@ def export_table(
             row_count=0,
             order_by=None,
             status="skipped",
-            note="no columns",
+            note="无列信息",
         )
 
     row_count = table_row_count(conn, table_name)
@@ -215,7 +223,7 @@ def export_table(
             row_count=0,
             order_by=order_by,
             status="skipped",
-            note="empty table",
+            note="空表",
         )
 
     sql = build_export_query(table_name, columns, limit)
@@ -281,12 +289,12 @@ def main() -> None:
             tables = [t for t in args.tables if t in existing_export_tables]
             missing = [t for t in args.tables if t not in existing_export_tables]
             if missing:
-                print(f"Warning: these tables were not found and will be skipped: {missing}")
+                print(f"警告：以下表不存在，已跳过：{missing}")
         else:
             tables = existing_export_tables
 
         if not tables:
-            print("No exportable raw/legacy raw tables found in database.")
+            print("数据库中未找到可导出的 raw / 历史兼容原始表。")
             return
 
         writer = GoogleSheetsWriter(
@@ -314,8 +322,8 @@ def main() -> None:
         index_title = f"{args.prefix}{args.index_worksheet}"[:100] if args.prefix else args.index_worksheet[:100]
         write_index_sheet(writer, index_title, results)
         print(
-            f"Done. Exported summary index to worksheet={index_title!r} "
-            f"in spreadsheet={writer.spreadsheet_id!r}"
+            f"已完成导出，并将汇总目录写入 spreadsheet={writer.spreadsheet_id!r} "
+            f"中的 worksheet={index_title!r}"
         )
     finally:
         conn.close()
