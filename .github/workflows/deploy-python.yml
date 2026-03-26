@@ -24,6 +24,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Debug server settings
+        run: |
+          echo "host_len=${#SERVER_HOST}"
+          echo "port=$SERVER_PORT"
+          echo "user=$SERVER_USER"
+          echo "app_dir_len=${#SERVER_APP_DIR}"
+          nslookup "$SERVER_HOST" || true
+
       - name: Upload project files
         uses: appleboy/scp-action@v0.1.7
         with:
