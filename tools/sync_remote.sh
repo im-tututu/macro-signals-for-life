@@ -4,14 +4,15 @@ set -euo pipefail
 # Sync local runtime files to remote server.
 #
 # Default behavior:
-# - sync .env
-# - sync py/data/db.sqlite
+# - sync .env only
 #
 # Usage:
 #   bash tools/sync_remote.sh
 #   bash tools/sync_remote.sh --dry-run
 #   bash tools/sync_remote.sh --env-only
-#   bash tools/sync_remote.sh --db-only
+#   bash tools/sync_remote.sh --db-push
+#   bash tools/sync_remote.sh --db-pull
+#   bash tools/sync_remote.sh --db-pull --no-env
 #
 # Optional env overrides:
 #   ENV_FILE=.env
@@ -48,7 +49,9 @@ load_env_file() {
         value="${value:1:${#value}-2}"
       fi
     fi
-    export "$key=$value"
+    if [[ -z "${!key+x}" ]]; then
+      export "$key=$value"
+    fi
   done <"$file"
 }
 
@@ -65,7 +68,7 @@ LOCAL_DB_PATH="${LOCAL_DB_PATH:-py/data/db.sqlite}"
 SSH_KEY_PATH="${SSH_KEY_PATH:-}"
 DRY_RUN=0
 SYNC_ENV=1
-SYNC_DB=1
+DB_MODE="none" # none | push | pull
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -75,12 +78,24 @@ while [[ $# -gt 0 ]]; do
       ;;
     --env-only)
       SYNC_ENV=1
-      SYNC_DB=0
+      DB_MODE="none"
+      shift
+      ;;
+    --no-env)
+      SYNC_ENV=0
+      shift
+      ;;
+    --db-push)
+      DB_MODE="push"
+      shift
+      ;;
+    --db-pull)
+      DB_MODE="pull"
       shift
       ;;
     --db-only)
-      SYNC_ENV=0
-      SYNC_DB=1
+      echo "[WARN] --db-only 已废弃，请改用 --db-push 或 --db-pull"
+      DB_MODE="push"
       shift
       ;;
     -h|--help)
@@ -94,8 +109,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ "$SYNC_ENV" -eq 0 && "$SYNC_DB" -eq 0 ]]; then
-  echo "[ERR] Nothing to sync. Use default / --env-only / --db-only." >&2
+if [[ "$SYNC_ENV" -eq 0 && "$DB_MODE" == "none" ]]; then
+  echo "[ERR] Nothing to sync. Use default / --env-only / --db-push / --db-pull." >&2
   exit 2
 fi
 
@@ -120,7 +135,7 @@ fi
 
 echo "[INFO] remote=${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_APP_DIR}"
 echo "[INFO] env_file=${ENV_FILE}"
-echo "[INFO] dry_run=${DRY_RUN} sync_env=${SYNC_ENV} sync_db=${SYNC_DB}"
+echo "[INFO] dry_run=${DRY_RUN} sync_env=${SYNC_ENV} db_mode=${DB_MODE}"
 
 if [[ "$DRY_RUN" -eq 0 ]]; then
   "${SSH_CMD[@]}" "mkdir -p ${REMOTE_APP_DIR}/py/data && mkdir -p ${REMOTE_APP_DIR}/py/data/logs"
@@ -143,19 +158,32 @@ if [[ "$SYNC_ENV" -eq 1 ]]; then
   echo "[OK] .env synced"
 fi
 
-if [[ "$SYNC_DB" -eq 1 ]]; then
+if [[ "$DB_MODE" != "none" ]]; then
   if [[ ! -f "$LOCAL_DB_PATH" ]]; then
-    echo "[ERR] Missing local db file: $LOCAL_DB_PATH" >&2
-    exit 1
+    if [[ "$DB_MODE" == "push" ]]; then
+      echo "[ERR] Missing local db file for push: $LOCAL_DB_PATH" >&2
+      exit 1
+    fi
   fi
-  if [[ "$DRY_RUN" -eq 0 ]]; then
-    rsync -avz --partial --inplace -e "$RSYNC_RSH" \
-      "$LOCAL_DB_PATH" \
-      "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_APP_DIR}/py/data/db.sqlite"
+  if [[ "$DB_MODE" == "push" ]]; then
+    if [[ "$DRY_RUN" -eq 0 ]]; then
+      rsync -avz --partial --inplace -e "$RSYNC_RSH" \
+        "$LOCAL_DB_PATH" \
+        "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_APP_DIR}/py/data/db.sqlite"
+    else
+      echo "[DRY] rsync -avz -e \"$RSYNC_RSH\" $LOCAL_DB_PATH ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_APP_DIR}/py/data/db.sqlite"
+    fi
+    echo "[OK] db.sqlite pushed to remote"
   else
-    echo "[DRY] rsync -avz -e \"$RSYNC_RSH\" $LOCAL_DB_PATH ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_APP_DIR}/py/data/db.sqlite"
+    if [[ "$DRY_RUN" -eq 0 ]]; then
+      rsync -avz --partial --inplace -e "$RSYNC_RSH" \
+        "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_APP_DIR}/py/data/db.sqlite" \
+        "$LOCAL_DB_PATH"
+    else
+      echo "[DRY] rsync -avz -e \"$RSYNC_RSH\" ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_APP_DIR}/py/data/db.sqlite $LOCAL_DB_PATH"
+    fi
+    echo "[OK] db.sqlite pulled to local"
   fi
-  echo "[OK] db.sqlite synced"
 fi
 
 echo "[DONE] sync completed"
