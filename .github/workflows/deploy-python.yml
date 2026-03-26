@@ -15,6 +15,11 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      SERVER_HOST: ${{ secrets.SERVER_HOST }}
+      SERVER_PORT: ${{ secrets.SERVER_PORT }}
+      SERVER_USER: ${{ secrets.SERVER_USER }}
+      SERVER_APP_DIR: ${{ secrets.SERVER_APP_DIR }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -22,25 +27,25 @@ jobs:
       - name: Upload project files
         uses: appleboy/scp-action@v0.1.7
         with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
+          host: ${{ env.SERVER_HOST }}
+          username: ${{ env.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          port: ${{ secrets.SERVER_PORT || '50022' }}
+          port: ${{ env.SERVER_PORT || '22' }}
           source: "py,docs,tools,.env.example,README.md,TODO.md"
-          target: "/home/ubuntu/apps/macro-signals-for-life-1"
+          target: ${{ env.SERVER_APP_DIR }}
           overwrite: true
           rm: false
 
       - name: Prepare runtime on server
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
+          host: ${{ env.SERVER_HOST }}
+          username: ${{ env.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          port: ${{ secrets.SERVER_PORT || '50022' }}
+          port: ${{ env.SERVER_PORT || '22' }}
           script: |
             set -e
-            cd /home/ubuntu/apps/macro-signals-for-life-1
+            cd "${{ env.SERVER_APP_DIR }}"
             python3 -m venv .venv
             . .venv/bin/activate
             python -m pip install -U pip
