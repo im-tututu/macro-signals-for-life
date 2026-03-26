@@ -396,6 +396,8 @@ class RuntimeSettings:
     alpha_vantage_api_key: str = ""
     jisilu_cookie: str = ""
     jisilu_user_agent: str = "Mozilla/5.0"
+    jisilu_refresh_url: str = ""
+    jisilu_refresh_token: str = ""
 
     @classmethod
     def load(cls) -> "RuntimeSettings":
@@ -408,6 +410,8 @@ class RuntimeSettings:
             alpha_vantage_api_key=_env_text("ALPHA_VANTAGE_API_KEY", "MSFL_ALPHA_VANTAGE_API_KEY") or "",
             jisilu_cookie=_env_text("JISILU_COOKIE", "MSFL_JISILU_COOKIE") or "",
             jisilu_user_agent=_env_text("JISILU_USER_AGENT", "MSFL_JISILU_USER_AGENT") or "Mozilla/5.0",
+            jisilu_refresh_url=_env_text("JISILU_REFRESH_URL", "MSFL_JISILU_REFRESH_URL") or "",
+            jisilu_refresh_token=_env_text("JISILU_REFRESH_TOKEN", "MSFL_JISILU_REFRESH_TOKEN") or "",
         )
 
 

@@ -5,6 +5,10 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Callable, Iterable
 
+from src.core.runtime import WriteStats
+from src.core.trading_calendar import is_trading_day
+from src.core.utils import today_ymd
+
 from .common import get_store, run_fetch_transform_job, run_fetch_transform_many_job, run_incremental_job, run_upsert_job
 
 
@@ -259,21 +263,37 @@ def fetch_latest_etf_snapshot(
     *,
     dry_run: bool = False,
     db_path: Path | None = None,
+    snapshot_date: str | None = None,
     rows_per_page: int = 500,
     max_pages: int = 20,
     min_unit_total_yi: float | int | str = 2,
     min_volume_wan: float | int | str = "",
 ):
-    """抓取最新指数 ETF 快照并写入原始 ETF 表。"""
+    """抓取最新指数 ETF 快照并写入原始 ETF 表。
+
+    策略：
+    - 仅交易日抓取
+    - 同一 snapshot_date 若已抓过则跳过
+    - 按 snapshot_date + fund_id 累积历史快照
+    """
 
     from src.sources.jisilu import JisiluSource
     from src.stores.etf import EtfStore
 
     store = EtfStore(db_path=db_path)
     source = JisiluSource()
+    target_snapshot_date = snapshot_date or today_ymd()
+
+    if not is_trading_day(target_snapshot_date):
+        return WriteStats(skipped=1)
+
+    if store.count_rows(snapshot_date=target_snapshot_date) > 0:
+        return WriteStats(skipped=1)
+
     return run_fetch_transform_many_job(
         store=store,
         fetch=lambda: source.fetch_etf_index_all_result(
+            snapshot_date=target_snapshot_date,
             rows_per_page=rows_per_page,
             max_pages=max_pages,
             min_unit_total_yi=min_unit_total_yi,

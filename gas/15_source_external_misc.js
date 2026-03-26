@@ -172,10 +172,8 @@ function buildAlphaVantageUrl_(spec, apiKey) {
 }
 
 function fetchSinaPrice_(symbol) {
-  if(isNaN(symbol))
-    //symbol = "SH019547";
-    symbol = "sh510300,sh510310,USDCNY";   
-  
+  if (!symbol) return '';
+
   // 不可以编码 URL
   // var url = SINA_FUTURES_QUOTE_URL + encodeURIComponent(symbol);
   var url = SINA_FUTURES_QUOTE_URL + symbol;

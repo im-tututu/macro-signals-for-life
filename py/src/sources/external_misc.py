@@ -91,6 +91,15 @@ class ExternalMiscSource(BaseSource):
             meta={"provider": "ALPHA_VANTAGE"},
         )
 
+    @staticmethod
+    def _normalize_futures_price(value: Optional[float]) -> Optional[float]:
+        if value is None:
+            return None
+        # 中金所国债期货主力/连续合约价格应在百元附近，4.x 这类值可视为抓取错位。
+        if value < 50:
+            return None
+        return value
+
     def fetch_sina_price(self, symbol: str | Iterable[str]) -> Optional[float]:
         candidates = [symbol] if isinstance(symbol, str) else list(symbol)
         expanded: list[str] = []
@@ -110,19 +119,21 @@ class ExternalMiscSource(BaseSource):
             arr = m.group(1).split(",")
             if len(arr) > 3:
                 value = to_float(arr[3])
-                if value and value > 0:
+                if value is not None and value > 0:
                     return value
             for item in arr:
                 value = to_float(item)
-                if value and value > 0:
+                if value is not None and value > 0:
                     return value
         return None
 
     def fetch_bond_futures_snapshot(self) -> FuturesSnapshot:
+        t0_last = self._normalize_futures_price(self.fetch_sina_price("T0"))
+        tf0_last = self._normalize_futures_price(self.fetch_sina_price("TF0"))
         return FuturesSnapshot(
             date=today_ymd(),
             source="hq.sinajs.cn",
-            values={"t0_last": self.fetch_sina_price("T0"), "tf0_last": self.fetch_sina_price("TF0")},
+            values={"t0_last": t0_last, "tf0_last": tf0_last},
             fetched_at=now_text(),
         )
 

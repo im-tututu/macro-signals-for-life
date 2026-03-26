@@ -51,6 +51,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--index-id", default=None, help="bond_index 使用的 index id。")
     parser.add_argument("--index-name", default=None, help="bond_index 可选 index name。")
     parser.add_argument("--index-code", default=None, help="bond_index 可选 index code。")
+    parser.add_argument("--snapshot-date", default=None, help="etf 可选快照日期，格式 YYYY-MM-DD。")
     parser.add_argument("--rows-per-page", type=int, default=500, help="etf 每页抓取条数。")
     parser.add_argument("--max-pages", type=int, default=20, help="etf 最大抓取页数。")
     parser.add_argument("--source-csv", type=Path, default=None, help="trading_days_update 可选源文件。")
@@ -92,6 +93,7 @@ def main() -> None:
             stats = fetch_latest_etf_snapshot(
                 dry_run=args.dry_run,
                 db_path=args.db_path,
+                snapshot_date=args.snapshot_date,
                 rows_per_page=args.rows_per_page,
                 max_pages=args.max_pages,
             )

@@ -1,5 +1,6 @@
 from .manual import clean_table, review_table, upsert_batch, upsert_incremental, upsert_single, upsert_window
 from .rebuild import clean_all_raw_tables, review_all_raw_tables
+from .registry import DAILY_JOB_REGISTRY, get_daily_job_spec
 
 
 def run_daily_fetcher(*args, **kwargs):
@@ -79,6 +80,8 @@ __all__ = [
     "fetch_latest_etf_snapshot",
     "fetch_latest_life_asset",
     "fetch_bond_index_duration",
+    "DAILY_JOB_REGISTRY",
+    "get_daily_job_spec",
     "clean_table",
     "review_table",
     "upsert_batch",

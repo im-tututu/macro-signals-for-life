@@ -2,7 +2,10 @@
   "name": "macro-signals-for-life",
   "private": true,
   "scripts": {
-    "lint": "echo 'Use clasp push / Apps Script editor for runtime validation'"
+    "lint": "echo 'Use clasp push / Apps Script editor for runtime validation'",
+    "jisilu:webhook": "node tools/jisilu_cookie_webhook.mjs"
   },
-  "dependencies": {}
+  "dependencies": {
+    "playwright": "^1.53.0"
+  }
 }
