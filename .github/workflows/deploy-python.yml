@@ -1,0 +1,48 @@
+name: Deploy Python Stack To Server
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "py/**"
+      - "docs/**"
+      - "tools/**"
+      - ".env.example"
+      - ".github/workflows/deploy-python.yml"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Upload project files
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_PORT || '50022' }}
+          source: "py,docs,tools,.env.example,README.md,TODO.md"
+          target: "/home/ubuntu/apps/macro-signals-for-life-1"
+          overwrite: true
+          rm: false
+
+      - name: Prepare runtime on server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_PORT || '50022' }}
+          script: |
+            set -e
+            cd /home/ubuntu/apps/macro-signals-for-life-1
+            python3 -m venv .venv
+            . .venv/bin/activate
+            python -m pip install -U pip
+            pip install -r py/requirements.txt
+            python py/scripts/run_metrics_snapshot.py --dry-run --print-sample 0
