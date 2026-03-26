@@ -105,12 +105,14 @@ if [[ -z "$REMOTE_HOST" || -z "$REMOTE_USER" || -z "$REMOTE_APP_DIR" ]]; then
 fi
 
 SSH_OPTS=(-p "$REMOTE_PORT")
+SCP_OPTS=(-P "$REMOTE_PORT")
 if [[ -n "$SSH_KEY_PATH" ]]; then
   SSH_OPTS+=(-i "$SSH_KEY_PATH")
+  SCP_OPTS+=(-i "$SSH_KEY_PATH")
 fi
 
 SSH_CMD=(ssh "${SSH_OPTS[@]}" "${REMOTE_USER}@${REMOTE_HOST}")
-SCP_CMD=(scp "${SSH_OPTS[@]}")
+SCP_CMD=(scp "${SCP_OPTS[@]}")
 RSYNC_RSH="ssh -p ${REMOTE_PORT}"
 if [[ -n "$SSH_KEY_PATH" ]]; then
   RSYNC_RSH+=" -i ${SSH_KEY_PATH}"

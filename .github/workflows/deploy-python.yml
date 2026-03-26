@@ -12,6 +12,10 @@ on:
       - ".github/workflows/deploy-python.yml"
   workflow_dispatch:
 
+concurrency:
+  group: deploy-python-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -32,30 +36,55 @@ jobs:
           echo "app_dir_len=${#SERVER_APP_DIR}"
           nslookup "$SERVER_HOST" || true
 
-      - name: Upload project files
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ env.SERVER_HOST }}
-          username: ${{ env.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          port: ${{ env.SERVER_PORT || '22' }}
-          source: "py,docs,tools,.env.example,README.md,TODO.md"
-          target: ${{ env.SERVER_APP_DIR }}
-          overwrite: true
-          rm: false
+      - name: Setup SSH
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf "%s" "${{ secrets.SERVER_SSH_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -p "${SERVER_PORT:-22}" -H "$SERVER_HOST" >> ~/.ssh/known_hosts
 
-      - name: Prepare runtime on server
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ env.SERVER_HOST }}
-          username: ${{ env.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          port: ${{ env.SERVER_PORT || '22' }}
-          script: |
-            set -e
-            cd "${{ env.SERVER_APP_DIR }}"
-            python3 -m venv .venv
-            . .venv/bin/activate
-            python -m pip install -U pip
+      - name: Ensure remote app dir
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/id_deploy -p "${SERVER_PORT:-22}" "${SERVER_USER}@${SERVER_HOST}" \
+            "mkdir -p '${SERVER_APP_DIR}'"
+
+      - name: Rsync project files (incremental)
+        run: |
+          set -euo pipefail
+          rsync -az --delete \
+            -e "ssh -i ~/.ssh/id_deploy -p ${SERVER_PORT:-22}" \
+            --exclude ".git/" \
+            --exclude ".github/" \
+            --exclude ".venv/" \
+            --exclude "py/data/" \
+            py docs tools .env.example README.md TODO.md \
+            "${SERVER_USER}@${SERVER_HOST}:${SERVER_APP_DIR}/"
+
+      - name: Prepare runtime on server (smart pip)
+        run: |
+          set -euo pipefail
+          REQ_HASH="$(sha256sum py/requirements.txt | awk '{print $1}')"
+          ssh -i ~/.ssh/id_deploy -p "${SERVER_PORT:-22}" "${SERVER_USER}@${SERVER_HOST}" \
+            "APP_DIR='${SERVER_APP_DIR}' REQ_HASH='${REQ_HASH}' bash -s" <<'EOF'
+          set -euo pipefail
+          cd "$APP_DIR"
+          mkdir -p .runtime
+
+          python3 -m venv .venv
+          . .venv/bin/activate
+          python -m pip install -U pip
+
+          REQ_HASH_FILE=".runtime/requirements.sha256"
+          PREV_HASH="$(cat "$REQ_HASH_FILE" 2>/dev/null || true)"
+          if [ "$PREV_HASH" != "$REQ_HASH" ]; then
+            echo "[INFO] requirements changed, installing deps..."
             pip install -r py/requirements.txt
-            python py/scripts/run_metrics_snapshot.py --dry-run --print-sample 0
+            echo "$REQ_HASH" > "$REQ_HASH_FILE"
+          else
+            echo "[INFO] requirements unchanged, skip pip install"
+          fi
+
+          python py/scripts/run_metrics_snapshot.py --dry-run --print-sample 0
+          EOF
