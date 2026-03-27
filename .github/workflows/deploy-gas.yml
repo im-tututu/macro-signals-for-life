@@ -6,8 +6,6 @@ on:
       - main
     paths:
       - 'gas/**'
-      - 'package.json'
-      - 'package-lock.json'
       - '.github/workflows/deploy-gas.yml'
   workflow_dispatch:
 
@@ -24,9 +22,11 @@ jobs:
         with:
           node-version: 24
           cache: npm
+          cache-dependency-path: gas/package.json
 
       - name: Install dependencies
-        run: npm ci
+        working-directory: gas
+        run: npm install
 
       - name: Write clasp credentials
         run: |
@@ -36,7 +36,7 @@ jobs:
 
       - name: Write .clasp.json
         run: |
-          cat > .clasp.json <<'EOF'
+          cat > gas/.clasp.json <<'EOF'
           {
             "scriptId": "${{ secrets.GAS_SCRIPT_ID }}",
             "rootDir": "src"
@@ -44,12 +44,14 @@ jobs:
           EOF
 
       - name: Push to Apps Script
-        run: npx -y @google/clasp push -f
+        working-directory: gas
+        run: npx clasp push -f
 
       - name: Sync external API keys to Script Properties
+        working-directory: gas
         env:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
           ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
         run: |
           PARAMS=$(node -e 'console.log(JSON.stringify([process.env.FRED_API_KEY, process.env.ALPHA_VANTAGE_API_KEY]))')
-          npx -y @google/clasp run-function setApiKeysFromParams --params "$PARAMS"
+          npx clasp run-function setApiKeysFromParams --params "$PARAMS"

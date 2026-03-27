@@ -88,14 +88,14 @@ coverage/
 # =========================
 # GAS / clasp local auth
 # =========================
-# .clasp.json
-# .clasprc.json
+.clasp.json
+.clasprc.json
 .claspignore
 
 
 # If you later put deployment-only local files under gas/
-# gas/.clasp.json
-# gas/.clasprc.json
+gas/.clasp.json
+gas/.clasprc.json
 
 # =========================
 # Optional: generated docs or exports

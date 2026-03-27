@@ -7,12 +7,12 @@ set -euo pipefail
 # - sync .env only
 #
 # Usage:
-#   bash tools/sync_remote.sh
-#   bash tools/sync_remote.sh --dry-run
-#   bash tools/sync_remote.sh --env-only
-#   bash tools/sync_remote.sh --db-push
-#   bash tools/sync_remote.sh --db-pull
-#   bash tools/sync_remote.sh --db-pull --no-env
+#   bash tools/local/sync_remote.sh
+#   bash tools/local/sync_remote.sh --dry-run
+#   bash tools/local/sync_remote.sh --env-only
+#   bash tools/local/sync_remote.sh --db-push
+#   bash tools/local/sync_remote.sh --db-pull
+#   bash tools/local/sync_remote.sh --db-pull --no-env
 #
 # Optional env overrides:
 #   ENV_FILE=.env
@@ -29,7 +29,7 @@ set -euo pipefail
 # This script auto-loads ENV_FILE (default .env) first.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 ENV_FILE="${ENV_FILE:-$REPO_ROOT/.env}"
 
 load_env_file() {

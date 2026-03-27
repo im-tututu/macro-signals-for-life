@@ -1,0 +1,11 @@
+{
+  "name": "macro-signals-for-life-gas",
+  "private": true,
+  "scripts": {
+    "push": "clasp push -f",
+    "run:set-api-keys": "clasp run-function setApiKeysFromParams"
+  },
+  "devDependencies": {
+    "@google/clasp": "^2.5.0"
+  }
+}

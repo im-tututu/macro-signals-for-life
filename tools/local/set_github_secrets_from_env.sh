@@ -4,8 +4,8 @@ set -euo pipefail
 # Sync selected GitHub Actions secrets from local .env.
 #
 # Usage:
-#   bash tools/set_github_secrets_from_env.sh
-#   ENV_FILE=.env bash tools/set_github_secrets_from_env.sh
+#   bash tools/local/set_github_secrets_from_env.sh
+#   ENV_FILE=.env bash tools/local/set_github_secrets_from_env.sh
 #
 # Required:
 #   - gh CLI installed
@@ -19,7 +19,9 @@ set -euo pipefail
 # Optional:
 #   GH_REPO=owner/repo   # defaults to current repo
 
-ENV_FILE="${ENV_FILE:-.env}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+ENV_FILE="${ENV_FILE:-$REPO_ROOT/.env}"
 GH_REPO="${GH_REPO:-}"
 
 load_env_file() {

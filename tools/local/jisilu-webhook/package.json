@@ -1,0 +1,10 @@
+{
+  "name": "macro-signals-for-life-jisilu-webhook",
+  "private": true,
+  "scripts": {
+    "start": "node index.mjs"
+  },
+  "dependencies": {
+    "playwright": "^1.53.0"
+  }
+}
