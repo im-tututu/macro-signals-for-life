@@ -12,19 +12,8 @@ PY_ROOT = CURRENT_DIR.parent
 if str(PY_ROOT) not in sys.path:
     sys.path.insert(0, str(PY_ROOT))
 
-from src.core.trading_calendar import DEFAULT_TRADING_DAYS_CSV, sync_trading_days_csv
-from src.jobs.daily import (
-    fetch_bond_index_duration,
-    fetch_latest_bond_curve,
-    fetch_latest_etf_snapshot,
-    fetch_latest_futures,
-    fetch_latest_life_asset,
-    fetch_latest_money_market,
-    fetch_latest_overseas_macro,
-    fetch_latest_policy_rate,
-    fetch_recent_policy_rate_events,
-)
-from src.jobs.registry import DAILY_JOB_REGISTRY
+from src.core.trading_calendar import DEFAULT_TRADING_DAYS_CSV
+from src.jobs.executor import execute_daily_job
 from src.metrics import build_metric_snapshots, list_metric_registry, sync_metric_daily_from_raw, upsert_metric_snapshots
 from export_latest_metric_snapshot_to_sheet import export_metric_snapshot_to_sheet
 
@@ -99,84 +88,20 @@ def run_group(args: argparse.Namespace) -> dict[str, object]:
     results: list[dict[str, object]] = []
 
     for job_name in jobs:
-        spec = DAILY_JOB_REGISTRY[job_name]
-        if job_name == "money_market":
-            stats = fetch_latest_money_market(dry_run=args.dry_run, db_path=args.db_path)
-            results.append({"job": job_name, "status": "success", "stats": stats.__dict__, "table": spec.target_table})
-        elif job_name == "bond_curve":
-            stats = fetch_latest_bond_curve(dry_run=args.dry_run, db_path=args.db_path)
-            results.append({"job": job_name, "status": "success", "stats": stats.__dict__, "table": spec.target_table})
-        elif job_name == "policy_rate":
-            stats = fetch_latest_policy_rate(dry_run=args.dry_run, db_path=args.db_path)
-            results.append({"job": job_name, "status": "success", "stats": stats.__dict__, "table": spec.target_table})
-        elif job_name == "futures":
-            stats = fetch_latest_futures(dry_run=args.dry_run, db_path=args.db_path)
-            results.append({"job": job_name, "status": "success", "stats": stats.__dict__, "table": spec.target_table})
-        elif job_name == "etf":
-            stats = fetch_latest_etf_snapshot(
+        results.extend(
+            execute_daily_job(
+                job_name,
                 dry_run=args.dry_run,
                 db_path=args.db_path,
+                limit=args.limit,
+                bond_index_ids=args.bond_index_id,
                 snapshot_date=args.snapshot_date,
                 rows_per_page=args.rows_per_page,
                 max_pages=args.max_pages,
+                source_csv=args.source_csv,
+                target_csv=args.target_csv,
             )
-            results.append({"job": job_name, "status": "success", "stats": stats.__dict__, "table": spec.target_table})
-        elif job_name == "life_asset":
-            stats = fetch_latest_life_asset(dry_run=args.dry_run, db_path=args.db_path)
-            results.append({"job": job_name, "status": "success", "stats": stats.__dict__, "table": spec.target_table})
-        elif job_name == "bond_index":
-            if not args.bond_index_id:
-                results.append(
-                    {
-                        "job": job_name,
-                        "status": "skipped",
-                        "reason": "missing --bond-index-id",
-                        "table": spec.target_table,
-                    }
-                )
-                continue
-            for index_id in args.bond_index_id:
-                stats = fetch_bond_index_duration(index_id, dry_run=args.dry_run, db_path=args.db_path)
-                results.append(
-                    {
-                        "job": job_name,
-                        "index_id": index_id,
-                        "status": "success",
-                        "stats": stats.__dict__,
-                        "table": spec.target_table,
-                    }
-                )
-        elif job_name == "overseas_macro":
-            stats = fetch_latest_overseas_macro(dry_run=args.dry_run, db_path=args.db_path)
-            results.append({"job": job_name, "status": "success", "stats": stats.__dict__, "table": spec.target_table})
-        elif job_name == "policy_rate_recent":
-            stats = fetch_recent_policy_rate_events(dry_run=args.dry_run, db_path=args.db_path, limit=args.limit)
-            results.append({"job": job_name, "status": "success", "stats": stats.__dict__, "table": spec.target_table})
-        elif job_name == "trading_days_update":
-            result = sync_trading_days_csv(
-                source_path=args.source_csv,
-                target_path=args.target_csv,
-                dry_run=args.dry_run,
-            )
-            results.append(
-                {
-                    "job": job_name,
-                    "status": "success",
-                    "table": spec.target_table,
-                    "stats": {
-                        "target_path": str(result.target_path),
-                        "source_path": str(result.source_path) if result.source_path else None,
-                        "coverage_start": result.coverage_start,
-                        "coverage_end": result.coverage_end,
-                        "row_count": result.row_count,
-                        "changed": result.changed,
-                        "created": result.created,
-                        "dry_run": result.dry_run,
-                    },
-                }
-            )
-        else:
-            raise ValueError(f"unsupported job in group: {job_name}")
+        )
 
     if args.group in {"cn_night", "us_morning"}:
         sync_stats = sync_metric_daily_from_raw(
