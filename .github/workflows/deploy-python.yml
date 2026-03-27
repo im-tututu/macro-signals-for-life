@@ -6,10 +6,7 @@ on:
       - main
     paths:
       - "py/**"
-      - "docs/**"
-      - "tools/**"
-      - ".env.example"
-      - ".github/workflows/deploy-python.yml"
+      - "tools/server/**"
   workflow_dispatch:
 
 concurrency:
