@@ -85,8 +85,13 @@ def _std(values: list[float]) -> float | None:
 def _percentile_rank(window: list[float], latest: float) -> float | None:
     if not window:
         return None
-    less_or_equal = sum(1 for x in window if x <= latest)
-    return less_or_equal / len(window)
+    min_value = min(window)
+    max_value = max(window)
+    if min_value == max_value:
+        return 0.5
+    less = sum(1 for x in window if x < latest)
+    equal = sum(1 for x in window if x == latest)
+    return (less + 0.5 * equal) / len(window)
 
 
 def _bp_factor(unit: str, values: list[float]) -> float:
@@ -118,18 +123,24 @@ def _snapshot_from_series(
     win250 = values[-250:] if values else []
     win750 = values[-750:] if values else []
     win_all = values
+    has_20 = len(win20) >= 20
+    has_250 = len(win250) >= 250
+    has_750 = len(win750) >= 750
 
     change_5d = None if latest_value is None or lag5 is None else latest_value - lag5
     change_20d = None if latest_value is None or lag20 is None else latest_value - lag20
     ma20 = _mean(win20)
     deviation_ma20 = None if latest_value is None or ma20 is None else latest_value - ma20
-    pct250 = None if latest_value is None else _percentile_rank(win250, latest_value)
-    pct3y = None if latest_value is None else _percentile_rank(win750, latest_value)
+    if not has_20:
+        change_20d = None
+        deviation_ma20 = None
+    pct250 = None if latest_value is None or not has_250 else _percentile_rank(win250, latest_value)
+    pct3y = None if latest_value is None or not has_750 else _percentile_rank(win750, latest_value)
     pctall = None if latest_value is None else _percentile_rank(win_all, latest_value)
-    std250 = _std(win250)
-    mean250 = _mean(win250)
+    std250 = _std(win250) if has_250 else None
+    mean250 = _mean(win250) if has_250 else None
     z1y = None if latest_value is None or std250 in (None, 0) or mean250 is None else (latest_value - mean250) / std250
-    med250 = median(win250) if win250 else None
+    med250 = median(win250) if has_250 else None
     bp_factor = _bp_factor(unit, values)
     dist_median_bp = None if latest_value is None or med250 is None or bp_factor <= 0 else (latest_value - med250) * bp_factor
 

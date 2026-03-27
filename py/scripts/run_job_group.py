@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from datetime import datetime
 from pathlib import Path
 
 CURRENT_DIR = Path(__file__).resolve().parent
@@ -24,6 +25,8 @@ from src.jobs.daily import (
     fetch_recent_policy_rate_events,
 )
 from src.jobs.registry import DAILY_JOB_REGISTRY
+from src.metrics import build_metric_snapshots, list_metric_registry, sync_metric_daily_from_raw, upsert_metric_snapshots
+from export_latest_metric_snapshot_to_sheet import export_metric_snapshot_to_sheet
 
 
 JOB_GROUPS: dict[str, tuple[str, ...]] = {
@@ -44,6 +47,31 @@ JOB_GROUPS: dict[str, tuple[str, ...]] = {
         "trading_days_update",
     ),
 }
+
+
+def _resolve_latest_metric_daily_date(db_path: Path | None) -> str:
+    from src.core.db import connect
+
+    with connect(db_path) as conn:
+        row = conn.execute("SELECT MAX(date) AS max_date FROM metric_daily").fetchone()
+    value = "" if row is None else str(row["max_date"] or "").strip()
+    if not value:
+        raise RuntimeError("metric_daily 无可用数据，无法继续生成 metric_snapshot / Sheet 导出。")
+    datetime.strptime(value, "%Y-%m-%d")
+    return value
+
+
+def _build_metric_snapshot_stats(db_path: Path | None, as_of_date: str, dry_run: bool) -> dict[str, object]:
+    db_path_text = str(db_path) if db_path else None
+    snapshots = build_metric_snapshots(db_path=db_path_text, as_of_date=as_of_date)
+    registry_count = len(list_metric_registry(db_path=db_path_text))
+    snapshot_count = upsert_metric_snapshots(snapshots, db_path=db_path_text, dry_run=dry_run)
+    return {
+        "as_of_date": as_of_date,
+        "registry_rows": registry_count,
+        "snapshot_rows": snapshot_count,
+        "dry_run": dry_run,
+    }
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -149,6 +177,43 @@ def run_group(args: argparse.Namespace) -> dict[str, object]:
             )
         else:
             raise ValueError(f"unsupported job in group: {job_name}")
+
+    if args.group in {"cn_night", "us_morning"}:
+        sync_stats = sync_metric_daily_from_raw(
+            db_path=str(args.db_path) if args.db_path else None,
+            dry_run=args.dry_run,
+        )
+        results.append(
+            {
+                "job": "metric_daily_sync",
+                "status": "success",
+                "table": "metric_daily",
+                "stats": sync_stats,
+            }
+        )
+        snapshot_date = _resolve_latest_metric_daily_date(args.db_path)
+        snapshot_stats = _build_metric_snapshot_stats(args.db_path, snapshot_date, args.dry_run)
+        results.append(
+            {
+                "job": "metric_snapshot",
+                "status": "success",
+                "table": "metric_snapshot",
+                "stats": snapshot_stats,
+            }
+        )
+        if not args.dry_run:
+            export_stats = export_metric_snapshot_to_sheet(
+                db=args.db_path or "runtime/db/app.sqlite",
+                as_of_date=snapshot_date,
+            )
+            results.append(
+                {
+                    "job": "metric_snapshot_export",
+                    "status": "success",
+                    "table": "google_sheet",
+                    "stats": export_stats,
+                }
+            )
 
     return {
         "group": args.group,

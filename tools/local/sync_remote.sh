@@ -25,8 +25,11 @@ set -euo pipefail
 #   DB_PATH=runtime/db/app.sqlite
 #   LOCAL_DB_PATH=runtime/db/app.sqlite
 #   REMOTE_DB_PATH=~/apps/macro-signals-for-life/runtime/db/app.sqlite
+#   GOOGLE_APPLICATION_CREDENTIALS=tools/local/google/service-account.json
 #
 # This script auto-loads ENV_FILE (default .env) first.
+# For settings defined in .env, the file value is the default source of truth.
+# To override a specific value for one run, pass it inline when invoking the script.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -53,9 +56,7 @@ load_env_file() {
         value="${value:1:${#value}-2}"
       fi
     fi
-    if [[ -z "${!key+x}" ]]; then
-      export "$key=$value"
-    fi
+    export "$key=$value"
   done <"$file"
 }
 
@@ -69,6 +70,7 @@ REMOTE_APP_DIR="${REMOTE_APP_DIR:-${SERVER_APP_DIR:-}}"
 LOCAL_ENV_PATH="${LOCAL_ENV_PATH:-$ENV_FILE}"
 DB_PATH_VALUE="${DB_PATH:-runtime/db/app.sqlite}"
 LOCAL_DB_PATH="${LOCAL_DB_PATH:-$DB_PATH_VALUE}"
+GOOGLE_CREDENTIALS_PATH_VALUE="${GOOGLE_APPLICATION_CREDENTIALS:-}"
 
 if [[ "$DB_PATH_VALUE" = /* ]]; then
   DEFAULT_REMOTE_DB_PATH="$DB_PATH_VALUE"
@@ -77,9 +79,22 @@ else
 fi
 REMOTE_DB_PATH="${REMOTE_DB_PATH:-$DEFAULT_REMOTE_DB_PATH}"
 
+LOCAL_GOOGLE_CREDENTIALS_PATH=""
+REMOTE_GOOGLE_CREDENTIALS_PATH=""
+if [[ -n "$GOOGLE_CREDENTIALS_PATH_VALUE" ]]; then
+  if [[ "$GOOGLE_CREDENTIALS_PATH_VALUE" = /* ]]; then
+    LOCAL_GOOGLE_CREDENTIALS_PATH="$GOOGLE_CREDENTIALS_PATH_VALUE"
+    REMOTE_GOOGLE_CREDENTIALS_PATH="$GOOGLE_CREDENTIALS_PATH_VALUE"
+  else
+    LOCAL_GOOGLE_CREDENTIALS_PATH="$REPO_ROOT/$GOOGLE_CREDENTIALS_PATH_VALUE"
+    REMOTE_GOOGLE_CREDENTIALS_PATH="${REMOTE_APP_DIR:+$REMOTE_APP_DIR/}$GOOGLE_CREDENTIALS_PATH_VALUE"
+  fi
+fi
+
 SSH_KEY_PATH="${SSH_KEY_PATH:-}"
 DRY_RUN=0
 SYNC_ENV=1
+SYNC_GOOGLE_CREDS=1
 DB_MODE="none" # none | push | pull
 
 while [[ $# -gt 0 ]]; do
@@ -95,6 +110,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --no-env)
       SYNC_ENV=0
+      shift
+      ;;
+    --no-google-creds)
+      SYNC_GOOGLE_CREDS=0
       shift
       ;;
     --db-push)
@@ -155,12 +174,18 @@ echo "[INFO] env_file=${ENV_FILE}"
 echo "[INFO] local_env_path=${LOCAL_ENV_PATH}"
 echo "[INFO] local_db_path=${LOCAL_DB_PATH}"
 echo "[INFO] remote_db_path=${REMOTE_DB_PATH}"
+echo "[INFO] local_google_credentials_path=${LOCAL_GOOGLE_CREDENTIALS_PATH:-<none>}"
+echo "[INFO] remote_google_credentials_path=${REMOTE_GOOGLE_CREDENTIALS_PATH:-<none>}"
 echo "[INFO] dry_run=${DRY_RUN} sync_env=${SYNC_ENV} db_mode=${DB_MODE}"
 
 if [[ "$DRY_RUN" -eq 0 ]]; then
-  "${SSH_CMD[@]}" "mkdir -p ${REMOTE_APP_DIR} && mkdir -p \$(dirname ${REMOTE_DB_PATH}) && mkdir -p ${REMOTE_APP_DIR}/runtime/logs"
+  REMOTE_MKDIR_CMD="mkdir -p ${REMOTE_APP_DIR} && mkdir -p \$(dirname ${REMOTE_DB_PATH}) && mkdir -p ${REMOTE_APP_DIR}/runtime/logs"
+  if [[ "$SYNC_GOOGLE_CREDS" -eq 1 && -n "$REMOTE_GOOGLE_CREDENTIALS_PATH" ]]; then
+    REMOTE_MKDIR_CMD+=" && mkdir -p \$(dirname ${REMOTE_GOOGLE_CREDENTIALS_PATH})"
+  fi
+  "${SSH_CMD[@]}" "$REMOTE_MKDIR_CMD"
 else
-  echo "[DRY] ssh ${REMOTE_USER}@${REMOTE_HOST} 'mkdir -p ${REMOTE_APP_DIR} \$(dirname ${REMOTE_DB_PATH}) ${REMOTE_APP_DIR}/runtime/logs'"
+  echo "[DRY] ssh ${REMOTE_USER}@${REMOTE_HOST} 'mkdir -p ${REMOTE_APP_DIR} \$(dirname ${REMOTE_DB_PATH}) ${REMOTE_APP_DIR}/runtime/logs${REMOTE_GOOGLE_CREDENTIALS_PATH:+ \$(dirname ${REMOTE_GOOGLE_CREDENTIALS_PATH})}'"
 fi
 
 if [[ "$SYNC_ENV" -eq 1 ]]; then
@@ -176,6 +201,21 @@ if [[ "$SYNC_ENV" -eq 1 ]]; then
     echo "[DRY] ssh ${REMOTE_USER}@${REMOTE_HOST} 'chmod 600 ${REMOTE_APP_DIR}/.env'"
   fi
   echo "[OK] .env synced"
+fi
+
+if [[ "$SYNC_GOOGLE_CREDS" -eq 1 && -n "$LOCAL_GOOGLE_CREDENTIALS_PATH" && -n "$REMOTE_GOOGLE_CREDENTIALS_PATH" ]]; then
+  if [[ ! -f "$LOCAL_GOOGLE_CREDENTIALS_PATH" ]]; then
+    echo "[ERR] Missing local Google credentials file: $LOCAL_GOOGLE_CREDENTIALS_PATH" >&2
+    exit 1
+  fi
+  if [[ "$DRY_RUN" -eq 0 ]]; then
+    "${SCP_CMD[@]}" "$LOCAL_GOOGLE_CREDENTIALS_PATH" "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_GOOGLE_CREDENTIALS_PATH}"
+    "${SSH_CMD[@]}" "chmod 600 ${REMOTE_GOOGLE_CREDENTIALS_PATH}"
+  else
+    echo "[DRY] scp $LOCAL_GOOGLE_CREDENTIALS_PATH ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_GOOGLE_CREDENTIALS_PATH}"
+    echo "[DRY] ssh ${REMOTE_USER}@${REMOTE_HOST} 'chmod 600 ${REMOTE_GOOGLE_CREDENTIALS_PATH}'"
+  fi
+  echo "[OK] Google credentials synced"
 fi
 
 if [[ "$DB_MODE" != "none" ]]; then
