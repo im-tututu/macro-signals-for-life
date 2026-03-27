@@ -8,6 +8,8 @@ set -euo pipefail
 # - 默认按北京时间(Asia/Shanghai)写入两条任务：
 #   22:10 跑 cn_night
 #   07:10 跑 us_morning
+# - `run_job_group.py` 已内置 metric_daily / metric_snapshot / Sheet 导出，
+#   这里不要再额外单独补跑 `run_metrics_snapshot.py`，避免重复执行同一轮派生任务
 # - 运行用户：当前用户（建议 ubuntu）
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -57,10 +59,8 @@ CRON_FILE="$(mktemp)"
   echo "TZ=$CRON_TZ"
   echo ""
   echo "10 22 * * 1-5 cd $APP_DIR && $PY_BIN py/scripts/run_job_group.py cn_night >> $LOG_DIR/cron_cn_night.log 2>&1"
-  echo "20 22 * * 1-5 cd $APP_DIR && $PY_BIN py/scripts/run_metrics_snapshot.py --print-sample 0 >> $LOG_DIR/cron_metrics.log 2>&1"
   echo ""
   echo "10 7 * * 2-6 cd $APP_DIR && $PY_BIN py/scripts/run_job_group.py us_morning >> $LOG_DIR/cron_us_morning.log 2>&1"
-  echo "20 7 * * 2-6 cd $APP_DIR && $PY_BIN py/scripts/run_metrics_snapshot.py --print-sample 0 >> $LOG_DIR/cron_metrics.log 2>&1"
 } >"$CRON_FILE"
 
 crontab "$CRON_FILE"

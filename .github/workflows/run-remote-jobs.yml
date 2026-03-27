@@ -29,4 +29,3 @@ jobs:
             cd "${{ env.SERVER_APP_DIR }}"
             . .venv/bin/activate
             python py/scripts/run_job_group.py "${{ github.event.inputs.group }}"
-            python py/scripts/run_metrics_snapshot.py --print-sample 0
