@@ -29,9 +29,44 @@ jobs:
         run: npm install
 
       - name: Write clasp credentials
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
         run: |
-          cat > ~/.clasprc.json <<'EOF'
-          ${{ secrets.CLASPRC_JSON }}
+          node <<'EOF'
+          const fs = require("fs");
+          const raw = (process.env.CLASPRC_JSON || "").trim();
+          if (!raw) {
+            throw new Error("Missing CLASPRC_JSON secret");
+          }
+          const parsed = JSON.parse(raw);
+          let output = parsed;
+
+          // Backward compatibility: some existing secrets were stored as
+          // {"tokens":{"default":{client_id, client_secret, refresh_token, access_token}}}
+          if (parsed.tokens && parsed.tokens.default) {
+            const token = parsed.tokens.default;
+            output = {
+              token: {
+                access_token: token.access_token || "",
+                refresh_token: token.refresh_token || "",
+                scope: token.scope || "",
+                token_type: token.token_type || "Bearer",
+                expiry_date: token.expiry_date || 0,
+              },
+              oauth2ClientSettings: {
+                clientId: token.client_id || "",
+                clientSecret: token.client_secret || "",
+                redirectUri: token.redirect_uri || "http://localhost",
+              },
+              isLocalCreds: false,
+            };
+          }
+
+          fs.writeFileSync(
+            `${process.env.HOME}/.clasprc.json`,
+            `${JSON.stringify(output, null, 2)}\n`,
+            "utf8",
+          );
           EOF
 
       - name: Write .clasp.json
