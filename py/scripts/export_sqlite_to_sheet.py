@@ -48,7 +48,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--db",
         default=str(cfg.db_path),
-        help="SQLite 数据库路径。默认读取 .env 中的 DB_PATH，或使用 py/data/db.sqlite。",
+        help="SQLite 数据库路径。默认读取 .env 中的 DB_PATH，或使用 runtime/db/app.sqlite。",
     )
     parser.add_argument(
         "--creds",

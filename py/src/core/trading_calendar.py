@@ -5,23 +5,23 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from .config import IMPORT_DIR, REFERENCE_DIR, REPO_ROOT, ensure_runtime_dirs, getenv_first
+from .config import LOCAL_DIR, RUNTIME_DIR, REPO_ROOT, ensure_runtime_dirs, getenv_first
 
 ENV_TRADING_DAYS_CSV_KEYS = ("TRADING_DAYS_CSV", "MSFL_TRADING_DAYS_CSV", "BOND_TRADING_DAYS_CSV")
 ENV_TRADING_DAYS_SOURCE_CSV_KEYS = ("TRADING_DAYS_SOURCE_CSV", "MSFL_TRADING_DAYS_SOURCE_CSV")
 
-DEFAULT_TRADING_DAYS_CSV = REFERENCE_DIR / "trading_days.csv"
+DEFAULT_TRADING_DAYS_CSV = RUNTIME_DIR / "trading_days.csv"
 
 TRADING_DAYS_CANDIDATES = [
     DEFAULT_TRADING_DAYS_CSV,
-    IMPORT_DIR / "trading_days.csv",
-    IMPORT_DIR / "interbank_bond_trading_days_2006-03-08_to_2026-03-08_enriched.csv",
+    LOCAL_DIR / "trading_days.csv",
+    LOCAL_DIR / "interbank_bond_trading_days_2006-03-08_to_2026-03-08_enriched.csv",
     REPO_ROOT / "interbank_bond_trading_days_2006-03-08_to_2026-03-08_enriched.csv",
 ]
 
 TRADING_DAYS_SOURCE_CANDIDATES = [
-    IMPORT_DIR / "interbank_bond_trading_days_2006-03-08_to_2026-03-08_enriched.csv",
-    IMPORT_DIR / "trading_days.csv",
+    LOCAL_DIR / "interbank_bond_trading_days_2006-03-08_to_2026-03-08_enriched.csv",
+    LOCAL_DIR / "trading_days.csv",
     REPO_ROOT / "interbank_bond_trading_days_2006-03-08_to_2026-03-08_enriched.csv",
 ]
 

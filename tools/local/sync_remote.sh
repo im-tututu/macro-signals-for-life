@@ -19,12 +19,12 @@ set -euo pipefail
 #   SERVER_HOST=your-host.example.com
 #   SERVER_PORT=22
 #   SERVER_USER=ubuntu
-#   SERVER_APP_DIR=/home/ubuntu/apps/macro-signals-for-life
+#   SERVER_APP_DIR=~/apps/macro-signals-for-life
 #   SSH_KEY_PATH=~/.ssh/id_ed25519
 #   LOCAL_ENV_PATH=.env
-#   DB_PATH=py/data/db.sqlite
-#   LOCAL_DB_PATH=py/data/db.sqlite
-#   REMOTE_DB_PATH=/home/ubuntu/apps/macro-signals-for-life/py/data/db.sqlite
+#   DB_PATH=runtime/db/app.sqlite
+#   LOCAL_DB_PATH=runtime/db/app.sqlite
+#   REMOTE_DB_PATH=~/apps/macro-signals-for-life/runtime/db/app.sqlite
 #
 # This script auto-loads ENV_FILE (default .env) first.
 
@@ -67,7 +67,7 @@ REMOTE_USER="${REMOTE_USER:-${SERVER_USER:-}}"
 REMOTE_APP_DIR="${REMOTE_APP_DIR:-${SERVER_APP_DIR:-}}"
 
 LOCAL_ENV_PATH="${LOCAL_ENV_PATH:-$ENV_FILE}"
-DB_PATH_VALUE="${DB_PATH:-py/data/db.sqlite}"
+DB_PATH_VALUE="${DB_PATH:-runtime/db/app.sqlite}"
 LOCAL_DB_PATH="${LOCAL_DB_PATH:-$DB_PATH_VALUE}"
 
 if [[ "$DB_PATH_VALUE" = /* ]]; then
@@ -158,9 +158,9 @@ echo "[INFO] remote_db_path=${REMOTE_DB_PATH}"
 echo "[INFO] dry_run=${DRY_RUN} sync_env=${SYNC_ENV} db_mode=${DB_MODE}"
 
 if [[ "$DRY_RUN" -eq 0 ]]; then
-  "${SSH_CMD[@]}" "mkdir -p ${REMOTE_APP_DIR} && mkdir -p \$(dirname ${REMOTE_DB_PATH}) && mkdir -p ${REMOTE_APP_DIR}/py/data/logs"
+  "${SSH_CMD[@]}" "mkdir -p ${REMOTE_APP_DIR} && mkdir -p \$(dirname ${REMOTE_DB_PATH}) && mkdir -p ${REMOTE_APP_DIR}/runtime/logs"
 else
-  echo "[DRY] ssh ${REMOTE_USER}@${REMOTE_HOST} 'mkdir -p ${REMOTE_APP_DIR} \$(dirname ${REMOTE_DB_PATH}) ${REMOTE_APP_DIR}/py/data/logs'"
+  echo "[DRY] ssh ${REMOTE_USER}@${REMOTE_HOST} 'mkdir -p ${REMOTE_APP_DIR} \$(dirname ${REMOTE_DB_PATH}) ${REMOTE_APP_DIR}/runtime/logs'"
 fi
 
 if [[ "$SYNC_ENV" -eq 1 ]]; then

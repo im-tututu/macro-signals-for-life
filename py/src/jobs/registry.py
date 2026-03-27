@@ -142,8 +142,8 @@ DAILY_JOB_REGISTRY: dict[str, DailyJobSpec] = {
     "trading_days_update": DailyJobSpec(
         job_name="trading_days_update",
         source_type="trading_days_csv_sync",
-        source_name="Trading Calendar",
-        target_table="reference/trading_days.csv",
+        source_name="Trading Calendar CSV",
+        target_table="runtime/trading_days.csv",
         cadence="manual_or_periodic",
         region="CN",
         suggested_schedule=ANYTIME_SCHEDULE,
@@ -157,4 +157,3 @@ def get_daily_job_spec(job_name: str) -> DailyJobSpec:
         return DAILY_JOB_REGISTRY[job_name]
     except KeyError as exc:
         raise ValueError(f"unknown daily job: {job_name}") from exc
-

@@ -39,33 +39,23 @@ env/
 .env.*
 !.env.example
 
-# Google service account / credentials
+# 本地凭证 / 密钥文件
 *service_account*.json
 *service-account*.json
 *credentials*.json
 token.json
 secrets.json
 
-# =========================
-# Local database / runtime data
-# =========================
-py/data/*db.sqlite*
-py/data/*.sqlite*
-py/data/*.sqlite3
-py/data/logs/
-py/data/exports/
-py/data/snapshots/
-py/data/tmp/
-py/data/cache/
-
-# keep folder structure if needed
-!py/data/.gitkeep
-!py/data/logs/.gitkeep
-!py/data/exports/.gitkeep
-!py/data/snapshots/.gitkeep
+# 本地工具私有目录
+tools/local/google/
 
 # =========================
-# Python local outputs
+# Runtime data
+# =========================
+runtime/
+
+# =========================
+# Local outputs
 # =========================
 *.log
 *.tmp
@@ -91,16 +81,5 @@ coverage/
 .clasp.json
 .clasprc.json
 .claspignore
-
-
-# If you later put deployment-only local files under gas/
 gas/.clasp.json
 gas/.clasprc.json
-
-# =========================
-# Optional: generated docs or exports
-# Uncomment if you later generate these locally
-# =========================
-# docs/_build/
-# *.csv
-# *.tsv

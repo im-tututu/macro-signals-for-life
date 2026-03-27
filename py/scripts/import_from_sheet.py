@@ -48,7 +48,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--db",
         default=str(cfg.db_path),
-        help="Path to SQLite database. Default: read DB_PATH from .env, or py/data/db.sqlite",
+        help="Path to SQLite database. Default: read DB_PATH from .env, or runtime/db/app.sqlite",
     )
     parser.add_argument(
         "--sheet-max-scan-rows",

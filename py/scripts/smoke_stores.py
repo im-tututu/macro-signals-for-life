@@ -13,7 +13,7 @@ from src.jobs.manual import upsert_batch
 
 
 def main() -> None:
-    db_path = Path("py/data/smoke.sqlite")
+    db_path = Path("runtime/db/smoke.sqlite")
     rows = [
         {
             "date": "2026-03-20",

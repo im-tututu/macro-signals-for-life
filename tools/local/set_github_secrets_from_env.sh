@@ -15,9 +15,11 @@ set -euo pipefail
 #       SERVER_PORT
 #       SERVER_USER
 #       SERVER_APP_DIR
+#       GAS_SCRIPT_ID
 #
 # Optional:
 #   GH_REPO=owner/repo   # defaults to current repo
+#   CLASPRC_JSON         # if present, also sync to GitHub Secrets
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -60,6 +62,7 @@ fi
 : "${SERVER_PORT:?Missing SERVER_PORT in $ENV_FILE}"
 : "${SERVER_USER:?Missing SERVER_USER in $ENV_FILE}"
 : "${SERVER_APP_DIR:?Missing SERVER_APP_DIR in $ENV_FILE}"
+: "${GAS_SCRIPT_ID:?Missing GAS_SCRIPT_ID in $ENV_FILE}"
 
 gh_secret_set() {
   local name="$1"
@@ -75,6 +78,14 @@ echo -n "$SERVER_HOST" | gh_secret_set SERVER_HOST
 echo -n "$SERVER_PORT" | gh_secret_set SERVER_PORT
 echo -n "$SERVER_USER" | gh_secret_set SERVER_USER
 echo -n "$SERVER_APP_DIR" | gh_secret_set SERVER_APP_DIR
+echo -n "$GAS_SCRIPT_ID" | gh_secret_set GAS_SCRIPT_ID
 
-echo "[OK] secrets updated: SERVER_HOST SERVER_PORT SERVER_USER SERVER_APP_DIR"
+updated_names=(SERVER_HOST SERVER_PORT SERVER_USER SERVER_APP_DIR GAS_SCRIPT_ID)
+
+if [[ -n "${CLASPRC_JSON:-}" ]]; then
+  echo -n "$CLASPRC_JSON" | gh_secret_set CLASPRC_JSON
+  updated_names+=(CLASPRC_JSON)
+fi
+
+echo "[OK] secrets updated: ${updated_names[*]}"
 echo "[INFO] SERVER_SSH_KEY is NOT updated by this script. Set it manually in GitHub Secrets."

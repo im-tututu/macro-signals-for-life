@@ -7,7 +7,7 @@
 - 原始层 `source -> store -> job` 主体结构已统一
 - `money_market / bond_curve / overseas_macro / policy_rate / futures / etf / bond_index` 已有可运行入口
 - `bond_curve backfill` 已接入交易日文件与 pre-check
-- 项目内 [`py/data/reference/trading_days.csv`](./py/data/reference/trading_days.csv) 已建立并支持更新到 `2026-12-31`
+- 项目内 [`runtime/trading_days.csv`](./runtime/trading_days.csv) 已建立并支持更新到 `2026-12-31`
 
 ---
 

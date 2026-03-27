@@ -19,7 +19,7 @@ const ETF_LIST_URL = process.env.JISILU_ETF_LIST_URL || "https://www.jisilu.cn/d
 const NAV_TIMEOUT_MS = Number(process.env.JISILU_NAV_TIMEOUT_MS || 30000);
 const POST_LOGIN_WAIT_MS = Number(process.env.JISILU_POST_LOGIN_WAIT_MS || 2500);
 const HEADLESS = String(process.env.JISILU_HEADLESS || "1") !== "0";
-const ARTIFACT_DIR = process.env.JISILU_ARTIFACT_DIR || "py/data/tmp/jisilu_webhook";
+const ARTIFACT_DIR = process.env.JISILU_ARTIFACT_DIR || "runtime/tmp/jisilu_webhook";
 const MANUAL_LOGIN_TIMEOUT_MS = Number(process.env.JISILU_MANUAL_LOGIN_TIMEOUT_MS || 180000);
 
 function json(res, statusCode, payload) {

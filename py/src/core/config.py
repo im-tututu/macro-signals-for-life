@@ -15,22 +15,22 @@ from src.core.models import CurveSpec
 PY_ROOT: Final[Path] = Path(__file__).resolve().parents[2]
 REPO_ROOT: Final[Path] = Path(__file__).resolve().parents[3]
 SRC_ROOT: Final[Path] = PY_ROOT / "src"
-DATA_DIR: Final[Path] = PY_ROOT / "data"
+RUNTIME_DIR: Final[Path] = REPO_ROOT / "runtime"
+LOCAL_DIR: Final[Path] = REPO_ROOT / "tools" / "local"
 SQL_DIR: Final[Path] = PY_ROOT / "sql"
 SCRIPT_DIR: Final[Path] = PY_ROOT / "scripts"
 TEST_DIR: Final[Path] = PY_ROOT / "tests"
-LOG_DIR: Final[Path] = DATA_DIR / "logs"
-EXPORT_DIR: Final[Path] = DATA_DIR / "exports"
-SNAPSHOT_DIR: Final[Path] = DATA_DIR / "snapshots"
-IMPORT_DIR: Final[Path] = DATA_DIR / "imports"
-REFERENCE_DIR: Final[Path] = DATA_DIR / "reference"
-DEFAULT_DB_PATH: Final[Path] = DATA_DIR / "db.sqlite"
+LOG_DIR: Final[Path] = RUNTIME_DIR / "logs"
+EXPORT_DIR: Final[Path] = RUNTIME_DIR / "exports"
+SNAPSHOT_DIR: Final[Path] = RUNTIME_DIR / "snapshots"
+TMP_DIR: Final[Path] = RUNTIME_DIR / "tmp"
+DB_DIR: Final[Path] = RUNTIME_DIR / "db"
+DEFAULT_DB_PATH: Final[Path] = DB_DIR / "app.sqlite"
 DEFAULT_INIT_SQL_PATH: Final[Path] = SQL_DIR / "0001_init.sql"
 DEFAULT_WORKBOOK_NAME: Final[str] = "宏观观察.xlsx"
 WORKBOOK_CANDIDATES: Final[list[Path]] = [
     REPO_ROOT / DEFAULT_WORKBOOK_NAME,
-    PY_ROOT / DEFAULT_WORKBOOK_NAME,
-    IMPORT_DIR / DEFAULT_WORKBOOK_NAME,
+    LOCAL_DIR / DEFAULT_WORKBOOK_NAME,
 ]
 
 # -----------------------------
@@ -355,7 +355,7 @@ def find_default_workbook() -> Path | None:
 
 
 def ensure_runtime_dirs() -> None:
-    for path in [DATA_DIR, LOG_DIR, EXPORT_DIR, SNAPSHOT_DIR, IMPORT_DIR, REFERENCE_DIR, SQL_DIR]:
+    for path in [RUNTIME_DIR, LOCAL_DIR, DB_DIR, LOG_DIR, EXPORT_DIR, SNAPSHOT_DIR, TMP_DIR, SQL_DIR]:
         path.mkdir(parents=True, exist_ok=True)
 
 
@@ -371,8 +371,9 @@ def as_dict(config: AppConfig | None = None) -> dict[str, str | None]:
     return {
         "repo_root": str(REPO_ROOT),
         "py_root": str(PY_ROOT),
-        "data_dir": str(DATA_DIR),
-        "reference_dir": str(REFERENCE_DIR),
+        "runtime_dir": str(RUNTIME_DIR),
+        "local_dir": str(LOCAL_DIR),
+        "db_dir": str(DB_DIR),
         "db_path": str(cfg.db_path),
         "init_sql_path": str(cfg.init_sql_path),
         "workbook_path": str(cfg.workbook_path) if cfg.workbook_path else None,

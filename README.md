@@ -70,7 +70,7 @@ flowchart TB
 
 ### 默认路径
 
-- SQLite：`py/data/db.sqlite`
+- SQLite：`runtime/db/app.sqlite`
 - 初始化 SQL：`py/sql/0001_init.sql`
 
 ### 常用命令

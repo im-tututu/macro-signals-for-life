@@ -43,9 +43,9 @@ load_env_file() {
 
 load_env_file "$ENV_FILE"
 
-APP_DIR="${APP_DIR:-${SERVER_APP_DIR:-/home/ubuntu/apps/macro-signals-for-life-1}}"
+APP_DIR="${APP_DIR:-${SERVER_APP_DIR:-$HOME/apps/macro-signals-for-life}}"
 CRON_TZ="${TZ:-Asia/Shanghai}"
-LOG_DIR="${LOG_DIR:-$APP_DIR/py/data/logs}"
+LOG_DIR="${LOG_DIR:-$APP_DIR/runtime/logs}"
 PY_BIN="$APP_DIR/.venv/bin/python"
 
 mkdir -p "$LOG_DIR"
