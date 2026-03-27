@@ -83,10 +83,84 @@ jobs:
         run: npx clasp push -f
 
       - name: Sync external API keys to Script Properties
-        working-directory: gas
         env:
+          GAS_SCRIPT_ID: ${{ secrets.GAS_SCRIPT_ID }}
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
           ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
         run: |
-          PARAMS=$(node -e 'console.log(JSON.stringify([process.env.FRED_API_KEY, process.env.ALPHA_VANTAGE_API_KEY]))')
-          npx clasp run-function setApiKeysFromParams --params "$PARAMS"
+          node <<'EOF'
+          const fs = require("fs");
+
+          const auth = JSON.parse(
+            fs.readFileSync(`${process.env.HOME}/.clasprc.json`, "utf8"),
+          );
+          const token = auth.token || auth.tokens?.default || auth;
+          const clientId = auth.oauth2ClientSettings?.clientId || token.client_id;
+          const clientSecret =
+            auth.oauth2ClientSettings?.clientSecret || token.client_secret;
+          const refreshToken = token.refresh_token;
+
+          if (!clientId || !clientSecret || !refreshToken) {
+            throw new Error("Missing OAuth fields in .clasprc.json");
+          }
+
+          async function main() {
+            const tokenResp = await fetch("https://oauth2.googleapis.com/token", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/x-www-form-urlencoded",
+              },
+              body: new URLSearchParams({
+                client_id: clientId,
+                client_secret: clientSecret,
+                refresh_token: refreshToken,
+                grant_type: "refresh_token",
+              }),
+            });
+
+            if (!tokenResp.ok) {
+              throw new Error(
+                `Failed to refresh access token: ${tokenResp.status} ${await tokenResp.text()}`,
+              );
+            }
+
+            const tokenJson = await tokenResp.json();
+            const accessToken = tokenJson.access_token;
+            if (!accessToken) {
+              throw new Error("OAuth token response missing access_token");
+            }
+
+            const runResp = await fetch(
+              `https://script.googleapis.com/v1/scripts/${process.env.GAS_SCRIPT_ID}:run`,
+              {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${accessToken}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  function: "setApiKeysFromParams",
+                  parameters: [
+                    process.env.FRED_API_KEY,
+                    process.env.ALPHA_VANTAGE_API_KEY,
+                  ],
+                  devMode: true,
+                }),
+              },
+            );
+
+            const runJson = await runResp.json();
+            if (!runResp.ok || runJson.error) {
+              throw new Error(
+                `Apps Script API run failed: ${JSON.stringify(runJson)}`,
+              );
+            }
+
+            console.log(JSON.stringify(runJson.response?.result || runJson, null, 2));
+          }
+
+          main().catch((error) => {
+            console.error(error.message || String(error));
+            process.exit(1);
+          });
+          EOF

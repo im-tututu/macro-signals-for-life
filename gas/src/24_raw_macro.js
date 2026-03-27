@@ -251,7 +251,7 @@ function fetchOverseasMacro_(forceRefresh) {
  *
  * 推荐搭配：
  * - GitHub Actions
- * - clasp run-function setApiKeysFromParams --params '["FRED_KEY","ALPHA_KEY"]'
+ * - Apps Script API scripts.run 调用 setApiKeysFromParams
  *
  * 说明：
  * - 这里只写入，不在日志中回显真实 key
