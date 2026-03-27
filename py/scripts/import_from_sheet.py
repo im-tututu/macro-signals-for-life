@@ -7,6 +7,7 @@ import argparse
 import json
 import math
 import sqlite3
+import sys
 import uuid
 from dataclasses import dataclass
 from datetime import date, datetime, time
@@ -14,6 +15,14 @@ from pathlib import Path
 from typing import Any, Iterable
 
 import openpyxl
+
+CURRENT_DIR = Path(__file__).resolve().parent
+PY_ROOT = CURRENT_DIR.parent
+SRC_DIR = PY_ROOT / "src"
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
+
+from core.config import AppConfig, load_local_env
 
 
 @dataclass(frozen=True)
@@ -28,16 +37,18 @@ class SheetSpec:
 
 
 def parse_args() -> argparse.Namespace:
+    load_local_env()
+    cfg = AppConfig.load()
     parser = argparse.ArgumentParser(description="Import historical Google Sheet data into SQLite staging/raw tables.")
     parser.add_argument(
         "--xlsx",
-        default="宏观观察.xlsx",
-        help="Path to workbook (.xlsx). Default: 宏观观察.xlsx",
+        default=str(cfg.workbook_path) if cfg.workbook_path else "宏观观察.xlsx",
+        help="Path to workbook (.xlsx). Default: read WORKBOOK_PATH from .env, or 宏观观察.xlsx",
     )
     parser.add_argument(
         "--db",
-        default="py/data/db.sqlite",
-        help="Path to SQLite database. Default: py/data/db.sqlite",
+        default=str(cfg.db_path),
+        help="Path to SQLite database. Default: read DB_PATH from .env, or py/data/db.sqlite",
     )
     parser.add_argument(
         "--sheet-max-scan-rows",
@@ -984,4 +995,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

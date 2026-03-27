@@ -22,11 +22,15 @@ set -euo pipefail
 #   SERVER_APP_DIR=/home/ubuntu/apps/macro-signals-for-life
 #   SSH_KEY_PATH=~/.ssh/id_ed25519
 #   LOCAL_ENV_PATH=.env
+#   DB_PATH=py/data/db.sqlite
 #   LOCAL_DB_PATH=py/data/db.sqlite
+#   REMOTE_DB_PATH=/home/ubuntu/apps/macro-signals-for-life/py/data/db.sqlite
 #
 # This script auto-loads ENV_FILE (default .env) first.
 
-ENV_FILE="${ENV_FILE:-.env}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+ENV_FILE="${ENV_FILE:-$REPO_ROOT/.env}"
 
 load_env_file() {
   local file="$1"
@@ -62,8 +66,16 @@ REMOTE_PORT="${REMOTE_PORT:-${SERVER_PORT:-22}}"
 REMOTE_USER="${REMOTE_USER:-${SERVER_USER:-}}"
 REMOTE_APP_DIR="${REMOTE_APP_DIR:-${SERVER_APP_DIR:-}}"
 
-LOCAL_ENV_PATH="${LOCAL_ENV_PATH:-.env}"
-LOCAL_DB_PATH="${LOCAL_DB_PATH:-py/data/db.sqlite}"
+LOCAL_ENV_PATH="${LOCAL_ENV_PATH:-$ENV_FILE}"
+DB_PATH_VALUE="${DB_PATH:-py/data/db.sqlite}"
+LOCAL_DB_PATH="${LOCAL_DB_PATH:-$DB_PATH_VALUE}"
+
+if [[ "$DB_PATH_VALUE" = /* ]]; then
+  DEFAULT_REMOTE_DB_PATH="$DB_PATH_VALUE"
+else
+  DEFAULT_REMOTE_DB_PATH="${REMOTE_APP_DIR:+$REMOTE_APP_DIR/}$DB_PATH_VALUE"
+fi
+REMOTE_DB_PATH="${REMOTE_DB_PATH:-$DEFAULT_REMOTE_DB_PATH}"
 
 SSH_KEY_PATH="${SSH_KEY_PATH:-}"
 DRY_RUN=0
@@ -119,6 +131,11 @@ if [[ -z "$REMOTE_HOST" || -z "$REMOTE_USER" || -z "$REMOTE_APP_DIR" ]]; then
   exit 2
 fi
 
+if [[ -z "$REMOTE_DB_PATH" ]]; then
+  echo "[ERR] Missing remote DB target. Please set DB_PATH or REMOTE_DB_PATH." >&2
+  exit 2
+fi
+
 SSH_OPTS=(-p "$REMOTE_PORT")
 SCP_OPTS=(-P "$REMOTE_PORT")
 if [[ -n "$SSH_KEY_PATH" ]]; then
@@ -135,12 +152,15 @@ fi
 
 echo "[INFO] remote=${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_APP_DIR}"
 echo "[INFO] env_file=${ENV_FILE}"
+echo "[INFO] local_env_path=${LOCAL_ENV_PATH}"
+echo "[INFO] local_db_path=${LOCAL_DB_PATH}"
+echo "[INFO] remote_db_path=${REMOTE_DB_PATH}"
 echo "[INFO] dry_run=${DRY_RUN} sync_env=${SYNC_ENV} db_mode=${DB_MODE}"
 
 if [[ "$DRY_RUN" -eq 0 ]]; then
-  "${SSH_CMD[@]}" "mkdir -p ${REMOTE_APP_DIR}/py/data && mkdir -p ${REMOTE_APP_DIR}/py/data/logs"
+  "${SSH_CMD[@]}" "mkdir -p ${REMOTE_APP_DIR} && mkdir -p \$(dirname ${REMOTE_DB_PATH}) && mkdir -p ${REMOTE_APP_DIR}/py/data/logs"
 else
-  echo "[DRY] ssh ${REMOTE_USER}@${REMOTE_HOST} 'mkdir -p ${REMOTE_APP_DIR}/py/data ${REMOTE_APP_DIR}/py/data/logs'"
+  echo "[DRY] ssh ${REMOTE_USER}@${REMOTE_HOST} 'mkdir -p ${REMOTE_APP_DIR} \$(dirname ${REMOTE_DB_PATH}) ${REMOTE_APP_DIR}/py/data/logs'"
 fi
 
 if [[ "$SYNC_ENV" -eq 1 ]]; then
@@ -169,18 +189,18 @@ if [[ "$DB_MODE" != "none" ]]; then
     if [[ "$DRY_RUN" -eq 0 ]]; then
       rsync -avz --partial --inplace -e "$RSYNC_RSH" \
         "$LOCAL_DB_PATH" \
-        "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_APP_DIR}/py/data/db.sqlite"
+        "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_DB_PATH}"
     else
-      echo "[DRY] rsync -avz -e \"$RSYNC_RSH\" $LOCAL_DB_PATH ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_APP_DIR}/py/data/db.sqlite"
+      echo "[DRY] rsync -avz -e \"$RSYNC_RSH\" $LOCAL_DB_PATH ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_DB_PATH}"
     fi
     echo "[OK] db.sqlite pushed to remote"
   else
     if [[ "$DRY_RUN" -eq 0 ]]; then
       rsync -avz --partial --inplace -e "$RSYNC_RSH" \
-        "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_APP_DIR}/py/data/db.sqlite" \
+        "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_DB_PATH}" \
         "$LOCAL_DB_PATH"
     else
-      echo "[DRY] rsync -avz -e \"$RSYNC_RSH\" ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_APP_DIR}/py/data/db.sqlite $LOCAL_DB_PATH"
+      echo "[DRY] rsync -avz -e \"$RSYNC_RSH\" ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_DB_PATH} $LOCAL_DB_PATH"
     fi
     echo "[OK] db.sqlite pulled to local"
   fi

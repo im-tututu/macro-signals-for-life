@@ -13,12 +13,13 @@ PY_ROOT = CURRENT_DIR.parent
 if str(PY_ROOT) not in sys.path:
     sys.path.insert(0, str(PY_ROOT))
 
-from src.core.config import load_local_env
+from src.core.config import AppConfig, load_local_env
 
 load_local_env()
+APP_CONFIG = AppConfig.load()
 
-DB = os.getenv("DB_PATH", "py/data/db.sqlite")
-AS_OF_DATE = os.getenv("AS_OF_DATE", "2026-03-26")
+DB = os.getenv("DB_PATH", str(APP_CONFIG.db_path))
+AS_OF_DATE = os.getenv("AS_OF_DATE", "").strip()
 MAX_METRICS = int(os.getenv("ANALYZE_MAX_METRICS", "120"))
 TEMPERATURE = float(os.getenv("ANALYZE_TEMPERATURE", "0.2"))
 TIMEOUT_SECONDS = int(os.getenv("ANALYZE_TIMEOUT_SECONDS", "60"))
@@ -62,6 +63,20 @@ cfg = _resolve_llm_config()
 
 conn = sqlite3.connect(DB)
 conn.row_factory = sqlite3.Row
+if not AS_OF_DATE:
+    latest_row = conn.execute(
+        """
+        SELECT as_of_date
+        FROM metric_snapshot
+        WHERE as_of_date IS NOT NULL
+          AND as_of_date <> ''
+        ORDER BY as_of_date DESC
+        LIMIT 1
+        """
+    ).fetchone()
+    if latest_row is None or not latest_row["as_of_date"]:
+        raise RuntimeError("缺少 AS_OF_DATE，且 metric_snapshot 表中没有可用快照日期。")
+    AS_OF_DATE = str(latest_row["as_of_date"])
 rows = conn.execute("""
 SELECT s.code, r.name_cn, r.category, r.importance, s.latest_value, s.change_5d, s.change_20d,
        s.percentile_250, s.zscore_1y, s.latest_date
