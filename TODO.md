@@ -7,7 +7,7 @@
 - 原始层 `source -> store -> job` 主体结构已统一
 - `money_market / bond_curve / overseas_macro / policy_rate / futures / etf / bond_index` 已有可运行入口
 - `bond_curve backfill` 已接入交易日文件与 pre-check
-- 项目内 [trading_days.csv](/Users/zy/Documents/git/macro-signals-for-life-1/py/data/reference/trading_days.csv) 已建立并支持更新到 `2026-12-31`
+- 项目内 [`py/data/reference/trading_days.csv`](./py/data/reference/trading_days.csv) 已建立并支持更新到 `2026-12-31`
 
 ---
 
@@ -148,7 +148,7 @@
 
 ### 11. metrics 计算层
 
-- [ ] [metrics.py](/Users/zy/Documents/git/macro-signals-for-life-1/py/src/analytics/metrics.py) 目前仍是空壳
+- [ ] [`py/src/analytics/metrics.py`](./py/src/analytics/metrics.py) 目前仍是空壳
 - [ ] 需要从 GAS `30_metrics.js` 提取 Python 版实现
   - [ ] 利率/曲线指标
   - [ ] 资金面指标
@@ -162,7 +162,7 @@
 
 ### 12. signal 生成层
 
-- [ ] [signals.py](/Users/zy/Documents/git/macro-signals-for-life-1/py/src/analytics/signals.py) 目前仍是空壳
+- [ ] [`py/src/analytics/signals.py`](./py/src/analytics/signals.py) 目前仍是空壳
 - [ ] 需要从 GAS `31_signal.js` 提取 Python 版实现
   - [ ] signal_main
   - [ ] signal_detail
@@ -220,10 +220,10 @@
 ### 17. Python CLI 入口继续收口
 
 - [ ] 当前入口分散在：
-  - [ ] [main.py](/Users/zy/Documents/git/macro-signals-for-life-1/py/main.py)
-  - [ ] [run_daily_job.py](/Users/zy/Documents/git/macro-signals-for-life-1/py/scripts/run_daily_job.py)
-  - [ ] [run_backfill.py](/Users/zy/Documents/git/macro-signals-for-life-1/py/scripts/run_backfill.py)
-  - [ ] [update_trading_calendar.py](/Users/zy/Documents/git/macro-signals-for-life-1/py/scripts/update_trading_calendar.py)
+  - [ ] [`py/main.py`](./py/main.py)
+  - [ ] [`py/scripts/run_daily_job.py`](./py/scripts/run_daily_job.py)
+  - [ ] [`py/scripts/run_backfill.py`](./py/scripts/run_backfill.py)
+  - [ ] [`py/scripts/update_trading_calendar.py`](./py/scripts/update_trading_calendar.py)
 - [ ] 后续需要考虑是否统一成一个更清晰的 CLI
 
 ### 18. schema / 表头文档
@@ -240,7 +240,7 @@
 
 - [ ] 当 raw 表、job、backfill 能力继续变化时，同步更新：
   - [ ] README
-  - [ ] [python_使用说明.md](/Users/zy/Documents/git/macro-signals-for-life-1/docs/python_使用说明.md)
+  - [ ] [`docs/python_使用说明.md`](./docs/python_使用说明.md)
   - [ ] 本文件
 
 ---

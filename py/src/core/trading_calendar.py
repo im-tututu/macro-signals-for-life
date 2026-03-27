@@ -17,14 +17,12 @@ TRADING_DAYS_CANDIDATES = [
     IMPORT_DIR / "trading_days.csv",
     IMPORT_DIR / "interbank_bond_trading_days_2006-03-08_to_2026-03-08_enriched.csv",
     REPO_ROOT / "interbank_bond_trading_days_2006-03-08_to_2026-03-08_enriched.csv",
-    Path("/Users/zy/Documents/git/chinabond/interbank_bond_trading_days_2006-03-08_to_2026-03-08_enriched.csv"),
 ]
 
 TRADING_DAYS_SOURCE_CANDIDATES = [
     IMPORT_DIR / "interbank_bond_trading_days_2006-03-08_to_2026-03-08_enriched.csv",
     IMPORT_DIR / "trading_days.csv",
     REPO_ROOT / "interbank_bond_trading_days_2006-03-08_to_2026-03-08_enriched.csv",
-    Path("/Users/zy/Documents/git/chinabond/interbank_bond_trading_days_2006-03-08_to_2026-03-08_enriched.csv"),
 ]
 
 # 依据中国政府网《国务院办公厅关于2026年部分节假日安排的通知》
