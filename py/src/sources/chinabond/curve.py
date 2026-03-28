@@ -14,7 +14,7 @@ from src.core.config import CURVES, TERMS, settings
 from src.core.models import CurveBlock, CurveSnapshot, CurveSpec
 from src.core.utils import strip_tags
 
-from .base import BaseSource, FetchResult
+from ..base import BaseSource, FetchResult
 
 CHINABOND_YC_DETAIL_URL = "https://yield.chinabond.com.cn/cbweb-mn/yc/ycDetail"
 CHINABOND_HEADERS = {
@@ -37,6 +37,15 @@ def _require_bs4() -> None:
 class ChinaBondSource(BaseSource):
     """中债收益率曲线来源。
 
+    这里专门承接“中债收益率曲线”这一条来源语义。
+    虽然都属于 ChinaBond 站点，但曲线、指数、估值等接口的请求参数、
+    响应结构和业务主键差异都很大，所以不应该继续收拢成一个超大 source。
+
+    access kind:
+    - `xhr_html`
+    - 虽然也是异步请求，但返回的是 HTML 片段，不是干净 JSON；
+      维护重点通常在 headers、页面结构和别名匹配，而不是 schema 校验。
+
     source 层只负责：
     - 调用中债接口
     - 解析 block
@@ -44,6 +53,8 @@ class ChinaBondSource(BaseSource):
     """
 
     def fetch_curve_html(self, work_time: str, yc_def_ids: Iterable[str]) -> str:
+        # 中债这个接口稳定性一般，且偶发返回过短 HTML，所以这里保留来源级重试，
+        # 避免把“站点脆弱性”泄漏到 job 层。
         payload = {
             "ycDefIds": ",".join(yc_def_ids),
             "zblx": "txy",
@@ -78,6 +89,8 @@ class ChinaBondSource(BaseSource):
 
     @staticmethod
     def build_curve_title_key(text: str) -> str:
+        # 页面标题并不是稳定主键，这里做的是“弱规范化”，目标是尽量把页面文案
+        # 对齐到内部 curve registry 能识别的别名体系。
         key = strip_tags(text or "")
         replacements = [
             (r"\s+", ""),
@@ -182,6 +195,7 @@ class ChinaBondSource(BaseSource):
 
     def fetch_daily_wide(self, date: str, curves: Optional[List[CurveSpec]] = None) -> List[CurveSnapshot]:
         curves = curves or CURVES
+        # 大多数曲线可以批量抓，少数必须单独抓；这是来源层知识，不应散落到 job 层。
         batch_curves = [c for c in curves if not c.fetch_separately]
 
         batch_blocks: List[CurveBlock] = []

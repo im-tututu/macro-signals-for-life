@@ -11,7 +11,7 @@ PY_ROOT = CURRENT_DIR.parent
 if str(PY_ROOT) not in sys.path:
     sys.path.insert(0, str(PY_ROOT))
 
-from src.jobs.daily import fetch_latest_money_market
+from src.jobs.ingest import fetch_latest_money_market
 
 
 def parse_args() -> argparse.Namespace:

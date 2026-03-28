@@ -1,6 +1,23 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
+
+from src.datasets.base import DatasetSpec
+from src.datasets.registry import get_dataset_spec
+
+
+ExecutionKey = Literal[
+    "simple_latest",
+    "bond_curve",
+    "bond_index_batch",
+    "policy_rate_recent",
+    "etf_snapshot",
+    "qdii_snapshot",
+    "treasury_snapshot",
+    "sse_lively_bond_snapshot",
+    "trading_days_update",
+]
 
 
 @dataclass(frozen=True)
@@ -13,14 +30,48 @@ class JobScheduleAdvice:
 
 @dataclass(frozen=True)
 class DailyJobSpec:
+    """日常 job 的调度侧元信息。
+
+    它和 DatasetSpec 的分工刻意不同：
+    - DatasetSpec 描述数据集本身的更新/回填语义；
+    - DailyJobSpec 描述任务入口、调度窗口、区域归属等编排信息。
+
+    当某个 job 直接对应一个 dataset 时，尽量只记录 dataset_id，
+    由这里统一回读 source_name / target_table，避免两边重复维护。
+    """
+
     job_name: str
     source_type: str
-    source_name: str
-    target_table: str
+    execution_key: ExecutionKey
     cadence: str
     region: str
     suggested_schedule: JobScheduleAdvice
+    dataset_id: str | None = None
+    source_name_override: str | None = None
+    target_table_override: str | None = None
     notes: tuple[str, ...] = ()
+
+    @property
+    def dataset_spec(self) -> DatasetSpec | None:
+        if self.dataset_id is None:
+            return None
+        return get_dataset_spec(self.dataset_id)
+
+    @property
+    def source_name(self) -> str:
+        if self.source_name_override:
+            return self.source_name_override
+        if self.dataset_spec is not None:
+            return self.dataset_spec.source_name
+        raise ValueError(f"daily job {self.job_name} is missing source_name metadata")
+
+    @property
+    def target_table(self) -> str:
+        if self.target_table_override:
+            return self.target_table_override
+        if self.dataset_spec is not None:
+            return self.dataset_spec.table_name
+        raise ValueError(f"daily job {self.job_name} is missing target_table metadata")
 
 
 CN_NIGHT_SCHEDULE = JobScheduleAdvice(
@@ -49,71 +100,71 @@ DAILY_JOB_REGISTRY: dict[str, DailyJobSpec] = {
     "money_market": DailyJobSpec(
         job_name="money_market",
         source_type="chinamoney_prr_md",
-        source_name="ChinaMoney",
-        target_table="raw_money_market",
+        execution_key="simple_latest",
         cadence="daily",
         region="CN",
         suggested_schedule=CN_NIGHT_SCHEDULE,
+        dataset_id="money_market",
         notes=("银行间资金面属于国内日频数据，建议与其他国内源一起晚间统一调度。",),
     ),
     "bond_curve": DailyJobSpec(
         job_name="bond_curve",
         source_type="chinabond_yield_curve",
-        source_name="ChinaBond",
-        target_table="raw_bond_curve",
+        execution_key="bond_curve",
         cadence="daily",
         region="CN",
         suggested_schedule=CN_NIGHT_SCHEDULE,
+        dataset_id="chinabond_curve",
         notes=("默认会寻找最近可用交易日；若用于回补历史，可改走 backfill。",),
     ),
     "bond_index": DailyJobSpec(
         job_name="bond_index",
         source_type="chinabond_index_single",
-        source_name="ChinaBond Index",
-        target_table="raw_bond_index",
+        execution_key="bond_index_batch",
         cadence="daily",
         region="CN",
         suggested_schedule=CN_NIGHT_SCHEDULE,
+        dataset_id="bond_index",
         notes=("需要显式提供 index_id，更适合作为按名单批量调度，而不是单条裸 cron。",),
     ),
     "policy_rate": DailyJobSpec(
         job_name="policy_rate",
         source_type="pbc_policy_rate_latest",
-        source_name="PBC",
-        target_table="raw_policy_rate",
+        execution_key="simple_latest",
         cadence="daily",
         region="CN",
         suggested_schedule=CN_NIGHT_SCHEDULE,
+        dataset_id="policy_rate",
         notes=("适合抓取最新一组政策利率事件。",),
     ),
     "policy_rate_recent": DailyJobSpec(
         job_name="policy_rate_recent",
         source_type="pbc_policy_rate",
-        source_name="PBC",
-        target_table="raw_policy_rate",
+        execution_key="policy_rate_recent",
         cadence="backfill_or_daily",
         region="CN",
         suggested_schedule=ANYTIME_SCHEDULE,
+        dataset_id="policy_rate",
         notes=("更偏补采任务，通常不建议与日常 latest 任务同时高频运行。",),
     ),
     "futures": DailyJobSpec(
         job_name="futures",
         source_type="sina_futures",
-        source_name="Sina Futures",
-        target_table="raw_futures",
+        execution_key="simple_latest",
         cadence="daily",
         region="CN",
         suggested_schedule=CN_NIGHT_SCHEDULE,
+        dataset_id="futures",
         notes=("国债期货建议在晚间统一抓一次；若要提高时效性，可额外加收盘后补抓。",),
     ),
     "etf": DailyJobSpec(
         job_name="etf",
         source_type="jisilu_etf",
-        source_name="Jisilu",
-        target_table="raw_jisilu_etf",
+        execution_key="etf_snapshot",
         cadence="daily",
         region="CN",
         suggested_schedule=CN_NIGHT_SCHEDULE,
+        dataset_id="etf",
         notes=(
             "按交易日快照累积。",
             "job 内已做 pre-check：同一 snapshot_date 已抓过则跳过。",
@@ -122,31 +173,71 @@ DAILY_JOB_REGISTRY: dict[str, DailyJobSpec] = {
     "life_asset": DailyJobSpec(
         job_name="life_asset",
         source_type="life_asset_placeholder",
-        source_name="StatsGov/SGE/BOC Placeholder",
-        target_table="raw_life_asset",
+        execution_key="simple_latest",
         cadence="daily",
         region="CN",
         suggested_schedule=CN_NIGHT_SCHEDULE,
+        dataset_id="life_asset",
         notes=("当前仍以占位链路为主，后续来源补齐后继续沿用国内晚间窗口。",),
+    ),
+    "qdii": DailyJobSpec(
+        job_name="qdii",
+        source_type="jisilu_qdii",
+        execution_key="qdii_snapshot",
+        cadence="daily",
+        region="CN",
+        suggested_schedule=CN_NIGHT_SCHEDULE,
+        dataset_id="qdii",
+        notes=(
+            "按交易日抓集思录 QDII 分市场快照。",
+            "当前默认一次抓欧美、商品、亚洲三个 market 视图。",
+        ),
+    ),
+    "treasury": DailyJobSpec(
+        job_name="treasury",
+        source_type="jisilu_treasury",
+        execution_key="treasury_snapshot",
+        cadence="daily",
+        region="CN",
+        suggested_schedule=CN_NIGHT_SCHEDULE,
+        dataset_id="treasury",
+        notes=(
+            "按交易日抓集思录国债现券全量表格快照。",
+            "当前默认使用 do_search=false 的全量列表页面。",
+        ),
+    ),
+    "sse_lively_bond": DailyJobSpec(
+        job_name="sse_lively_bond",
+        source_type="sse_lively_bond",
+        execution_key="sse_lively_bond_snapshot",
+        cadence="daily",
+        region="CN",
+        suggested_schedule=CN_NIGHT_SCHEDULE,
+        dataset_id="sse_lively_bond",
+        notes=(
+            "按最近交易日抓上交所活跃国债榜单。",
+            "榜单数据条数通常不大，更偏监控/校验辅助来源。",
+        ),
     ),
     "overseas_macro": DailyJobSpec(
         job_name="overseas_macro",
         source_type="fred_alpha_vantage",
-        source_name="FRED + Alpha Vantage",
-        target_table="raw_overseas_macro",
+        execution_key="simple_latest",
         cadence="daily",
         region="US",
         suggested_schedule=US_MORNING_SCHEDULE,
+        dataset_id="overseas_macro",
         notes=("建议在北京时间早晨执行，避开美国日频序列尚未稳定的窗口。",),
     ),
     "trading_days_update": DailyJobSpec(
         job_name="trading_days_update",
         source_type="trading_days_csv_sync",
-        source_name="Trading Calendar CSV",
-        target_table="runtime/trading_days.csv",
+        execution_key="trading_days_update",
         cadence="manual_or_periodic",
         region="CN",
         suggested_schedule=ANYTIME_SCHEDULE,
+        source_name_override="Trading Calendar CSV",
+        target_table_override="runtime/trading_days.csv",
         notes=("更适合人工维护或周级同步，不必每天跑。",),
     ),
 }

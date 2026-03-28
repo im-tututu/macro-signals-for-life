@@ -4,25 +4,36 @@ import json
 import logging
 import os
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from src.core.config import settings
 from src.core.notify import build_notifier
 from src.core.utils import now_text, today_ymd
 
-from .base import BaseSource, FetchResult
+from ..base import BaseSource, FetchResult
 
 JISILU_ETF_LIST_URL = "https://www.jisilu.cn/data/etf/etf_list/"
 
 
-class JisiluSource(BaseSource):
-    """集思录 ETF 来源。"""
+class JisiluEtfSource(BaseSource):
+    """集思录 ETF 来源。
+
+    当前这个类只承接 ETF 列表入口。
+    虽然都属于集思录站点，但 ETF、QDII、商品 ETF、可转债、分级等页面
+    的筛选参数、鉴权要求和返回结构并不天然一致，后续更适合拆成按业务域划分
+    的多个 source，而不是继续把整个站点做成一个大类。
+
+    access kind:
+    - `xhr_json`
+    - 但它比普通开放 API 更脆弱，因为还依赖 cookie、referer 和站点登录态。
+    """
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self._cookie = settings.jisilu_cookie
         self._notifier = build_notifier(logging.getLogger(__name__))
         self._cookie_expired_notified = False
+        # 集思录接口对 cookie 很敏感，所以在来源初始化时就把会话头准备好。
         self._apply_cookie()
         self.http.session.headers["User-Agent"] = settings.jisilu_user_agent
         self.http.session.headers["Referer"] = "https://www.jisilu.cn/data/etf/etf_list/"
@@ -57,6 +68,7 @@ class JisiluSource(BaseSource):
         return total is not None and total > len(rows)
 
     def _refresh_cookie_from_webhook(self) -> str:
+        # cookie 刷新属于“访问来源所需的站点协商逻辑”，所以留在 source 层最合适。
         if not settings.jisilu_refresh_url:
             raise RuntimeError("missing JISILU_REFRESH_URL")
 
@@ -119,6 +131,7 @@ class JisiluSource(BaseSource):
         payload = response.json()
         rows = payload.get("rows", []) or []
         records = payload.get("records", payload.get("total", payload.get("total_rows", "")))
+        # “游客仅显示 20 条”是这个来源最常见的隐性失败，需要在来源层直接识别。
         if self._detect_tourist_limit(raw_text, payload) or self._looks_like_tourist_rows(rows, records):
             self._notify_cookie_expired()
             raise RuntimeError("Jisilu tourist limited")

@@ -16,8 +16,11 @@ from src.stores import (
     MoneyMarketStore,
     OverseasStore,
     PolicyRateStore,
+    QdiiStore,
     RunLogStore,
     SignalsStore,
+    SseLivelyBondStore,
+    TreasuryStore,
 )
 from src.stores.base import BaseSqliteStore
 
@@ -32,6 +35,9 @@ STORE_REGISTRY: dict[str, type[BaseSqliteStore]] = {
     "raw_futures": FuturesStore,
     "raw_life_asset": LifeAssetStore,
     "raw_jisilu_etf": EtfStore,
+    "raw_jisilu_qdii": QdiiStore,
+    "raw_jisilu_treasury": TreasuryStore,
+    "raw_sse_lively_bond": SseLivelyBondStore,
     "run_log": RunLogStore,
     "metrics": MetricsStore,
     "signal_main": SignalsStore,

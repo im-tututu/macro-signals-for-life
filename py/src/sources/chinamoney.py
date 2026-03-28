@@ -17,6 +17,17 @@ CHINAMONEY_IBLR_CHART_URL = "https://www.chinamoney.com.cn/r/cms/www/chinamoney/
 class ChinaMoneySource(BaseSource):
     """ChinaMoney 资金面来源。
 
+    这是国内货币市场原始快照的核心入口之一。
+
+    当前文件聚焦“银行间资金面”这条来源语义，而不是把 ChinaMoney
+    站内所有数据都揉成一个大类。这样后续如果接入存单、回购历史等别的入口，
+    可以继续按业务主题拆分，而不是把所有东西塞进一个 source。
+
+    access kind:
+    - 最新快照主入口更接近 `api/json`
+    - 历史图表入口属于 `file_download`
+    - 所以这个来源的维护点会天然分成“接口字段稳定性”和“文件格式稳定性”两类
+
     这里不关心 SQLite 表结构，只返回领域对象和少量来源元信息。
     """
 
@@ -33,6 +44,8 @@ class ChinaMoneySource(BaseSource):
                 yield from ChinaMoneySource._iter_objects(item)
 
     def fetch_money_market_snapshot(self) -> MoneyMarketSnapshot:
+        # ChinaMoney 的 JSON 结构偶尔会变形，所以这里先尽量走“显式字段”路径，
+        # 再退回到递归扫描，优先保证日常抓取稳住。
         data = self.http.get_json(CHINAMONEY_PRR_MD_URL)
         fields: Dict[str, Any] = {}
         data_block = data.get("data", {}) if isinstance(data, dict) else {}
@@ -83,6 +96,7 @@ class ChinaMoneySource(BaseSource):
     def fetch_money_market(self) -> FetchResult[MoneyMarketSnapshot]:
         payload = self.http.get_json(CHINAMONEY_PRR_MD_URL)
         snapshot = self.fetch_money_market_snapshot()
+        # 业务日期比“抓取日期”更重要，后续落表和比对都应尽量对齐业务日期。
         snapshot.date = self.derive_business_date(payload)
         data_block = payload.get("data", {}) if isinstance(payload, dict) else {}
         return FetchResult(
@@ -92,6 +106,7 @@ class ChinaMoneySource(BaseSource):
         )
 
     def fetch_chart_csv(self, url: str) -> List[Dict[str, str]]:
+        # 这里代表的是 file_download 型入口，维护时要更关注表头和编码变化。
         text = self.http.get_text(url)
         reader = csv.DictReader(io.StringIO(text))
         return list(reader)

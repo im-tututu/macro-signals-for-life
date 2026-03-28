@@ -5,8 +5,6 @@ import argparse
 import json
 import sys
 from dataclasses import asdict
-from datetime import date as date_cls
-from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Iterable
 
@@ -15,12 +13,10 @@ PY_ROOT = CURRENT_DIR.parent
 if str(PY_ROOT) not in sys.path:
     sys.path.insert(0, str(PY_ROOT))
 
-from src.core.config import CURVES
-from src.core.trading_calendar import load_trading_day_window
 from src.core.runtime import WriteStats
-from src.jobs.daily import fetch_bond_curve_for_date, fetch_bond_index_duration, fetch_recent_policy_rate_events
+from src.jobs.backfill import backfill_chinabond_curve_window
+from src.jobs.ingest import fetch_bond_index_duration, fetch_recent_policy_rate_events
 from src.jobs.manual import review_table
-from src.stores.bond_curves import BondCurveStore
 
 
 def _parse_args() -> argparse.Namespace:
@@ -51,16 +47,6 @@ def _parse_args() -> argparse.Namespace:
 
     return parser.parse_args()
 
-
-def _iter_dates(start_date: str, end_date: str) -> list[str]:
-    start = datetime.strptime(start_date, "%Y-%m-%d").date()
-    end = datetime.strptime(end_date, "%Y-%m-%d").date()
-    if start > end:
-        raise ValueError("start_date 不能晚于 end_date。")
-    days = (end - start).days
-    return [(start + timedelta(days=offset)).isoformat() for offset in range(days + 1)]
-
-
 def _merge_stats(stats_list: Iterable[WriteStats]) -> WriteStats:
     merged = WriteStats()
     for stats in stats_list:
@@ -78,44 +64,16 @@ def _run_bond_curve_backfill(args: argparse.Namespace) -> dict[str, object]:
     if not args.start_date or not args.end_date:
         raise ValueError("bond_curve backfill 需要同时传 --start-date 和 --end-date。")
 
-    stats_list: list[WriteStats] = []
-    attempted_dates: list[str] = []
-    precheck_skipped_dates: list[str] = []
-    failures: list[dict[str, str]] = []
-    store = BondCurveStore(db_path=args.db_path)
-    expected_curves = [curve.name for curve in CURVES]
-    window = load_trading_day_window(
+    return backfill_chinabond_curve_window(
         start_date=args.start_date,
         end_date=args.end_date,
-        csv_path=args.trading_days_csv,
-        skip_weekends_on_fallback=args.skip_weekends,
+        db_path=args.db_path,
+        dry_run=args.dry_run,
+        review=args.review,
+        trading_days_csv=args.trading_days_csv,
+        skip_weekends=args.skip_weekends,
+        force_fetch=args.force_fetch,
     )
-
-    for current_date in window.dates:
-        current = datetime.strptime(current_date, "%Y-%m-%d").date()
-        if args.skip_weekends and window.csv_path is None and current.weekday() >= 5:
-            continue
-        if not args.force_fetch and store.has_complete_curves_for_date(current_date, expected_curves=expected_curves):
-            precheck_skipped_dates.append(current_date)
-            continue
-        attempted_dates.append(current_date)
-        try:
-            stats_list.append(fetch_bond_curve_for_date(current_date, dry_run=args.dry_run, db_path=args.db_path))
-        except Exception as exc:  # noqa: BLE001
-            failures.append({"date": current_date, "error": str(exc)})
-
-    return {
-        "target": "bond_curve",
-        "dates": attempted_dates,
-        "trading_days_csv": str(window.csv_path) if window.csv_path else None,
-        "calendar_coverage_start": window.coverage_start,
-        "calendar_coverage_end": window.coverage_end,
-        "fallback_dates": window.fallback_dates or [],
-        "precheck_skipped_dates": precheck_skipped_dates,
-        "stats": asdict(_merge_stats(stats_list)),
-        "failures": failures,
-        "review": _maybe_review("raw_bond_curve", enabled=args.review, db_path=args.db_path),
-    }
 
 
 def _run_policy_rate_backfill(args: argparse.Namespace) -> dict[str, object]:

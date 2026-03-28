@@ -22,6 +22,10 @@ def _require_bs4() -> None:
 class StatsGovSource(BaseSource):
     """国家统计局来源。
 
+    当前主要服务于 life_asset 这条链路里的“房价/民生统计”语义。
+    这和未来可能接入的工业、消费、固定资产投资等统计局数据是不同子域，
+    所以后续也更适合按业务主题拆，而不是维持一个超大 StatsGovSource。
+
     当前 life_asset 只先使用占位快照，保证链路结构完整。
     """
 

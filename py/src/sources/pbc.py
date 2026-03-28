@@ -30,15 +30,24 @@ def _require_bs4() -> None:
 class PbcSource(BaseSource):
     """央行政策利率来源。
 
+    这里聚焦的是“政策利率事件”这一类来源语义，而不是人民银行网站的全部内容。
+    OMO、MLF、LPR 虽然入口不同，但最终都汇聚成同一类 `PolicyRateEvent`，
+    所以当前放在同一个 source 里是合理的。
+
     当前 Python 侧先收口已有能力：
     - 公开市场操作 OMO 事件
     - MLF / LPR 的正文解析能力已在文件内，但列表入口后续再补齐
+
+    access kind:
+    - `page_html`
+    - 维护难点主要在网页结构漂移、正文清洗和正则抽取，而不是接口鉴权。
     """
 
     def fetch_html(self, url: str) -> str:
         return self.http.get_text(url, headers={"User-Agent": "Mozilla/5.0"})
 
     def extract_links(self, list_url: str, keyword: str = "") -> List[dict]:
+        # PBC 页面结构不稳定，所以既走 DOM 选择器，也保留正则兜底。
         html = self.fetch_html(list_url)
         _require_bs4()
         soup = BeautifulSoup(html, "lxml")
@@ -194,6 +203,7 @@ class PbcSource(BaseSource):
         return ""
 
     def _parse_omo(self, text: str, event_date: str, amount: Optional[float], url: str, fetched_at: str, title: str) -> List[PolicyRateEvent]:
+        # OMO 文案既可能是叙述句，也可能是表格转文本，所以这里保留多套模式并行提取。
         out: List[PolicyRateEvent] = []
 
         patterns = [

@@ -16,6 +16,28 @@ from src.jobs.executor import execute_daily_job
 from src.jobs.registry import DAILY_JOB_REGISTRY
 
 
+def _build_output_payload(result: dict[str, object], args: argparse.Namespace) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "job": result.get("job", args.job),
+        "status": result.get("status", "success"),
+        "table": result.get("table"),
+        "dry_run": args.dry_run,
+    }
+    if args.snapshot_date:
+        payload["snapshot_date"] = args.snapshot_date
+    if args.date:
+        payload["date"] = args.date
+    if args.index_id:
+        payload["index_id"] = args.index_id
+    if "stats" in result:
+        payload["stats"] = result["stats"]
+    else:
+        for key, value in result.items():
+            if key not in payload:
+                payload[key] = value
+    return payload
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="运行单条 Python daily job。")
     parser.add_argument(
@@ -69,11 +91,11 @@ def main() -> None:
     if args.job == "bond_index":
         if args.index_id is None:
             parser.error("bond_index 需要传 --index-id")
-        payload = results[0].get("stats", results[0])
+        payload = _build_output_payload(results[0], args)
         print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
         return
 
-    payload = results[0].get("stats", results[0])
+    payload = _build_output_payload(results[0], args)
     print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
 
 

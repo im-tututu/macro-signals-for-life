@@ -1,0 +1,214 @@
+from __future__ import annotations
+
+from .base import DatasetSpec
+
+
+# 注册表是数据层和调度层之间的“契约表”：
+# 新数据集接进来时，先在这里声明业务语义，job/executor 才能用统一流程驱动它。
+DATASET_REGISTRY: dict[str, DatasetSpec] = {
+    "money_market": DatasetSpec(
+        dataset_id="money_market",
+        source_name="ChinaMoney",
+        table_name="raw_money_market",
+        key_fields=("date",),
+        date_field="date",
+        update_mode="upsert",
+        supports_latest=True,
+        latest_mode="today",
+        supports_backfill=False,
+        backfill_mode="none",
+        trading_day_sensitive=True,
+        notes=(
+            "银行间资金面属于日频快照，通常按当日覆盖写入即可。",
+            "虽然来源页面展示的是最新一期，但业务上仍应视作交易日敏感数据。",
+        ),
+    ),
+    "chinabond_curve": DatasetSpec(
+        # 这里的 dataset_id 同时是 CLI/调度时引用该数据集的稳定入口。
+        dataset_id="chinabond_curve",
+        source_name="ChinaBond",
+        # 债券收益率曲线先落原始表，后续很多指标会基于这张表继续派生。
+        table_name="raw_bond_curve",
+        # 同一天同一条曲线只应有一条记录，避免重复抓取造成脏数据。
+        key_fields=("date", "curve"),
+        date_field="date",
+        # 曲线数据天然是按主键覆盖更新，而不是保留多份同日快照。
+        update_mode="upsert",
+        supports_latest=True,
+        # 债市接口经常不是“今天必有数据”，因此 latest 需要向前回看最近可用交易日。
+        latest_mode="latest_available_with_lookback",
+        supports_backfill=True,
+        # 历史补数按交易日跑更稳妥，可以避开周末和节假日空跑。
+        backfill_mode="trading_day_range",
+        trading_day_sensitive=True,
+        prefer_trading_day_window=True,
+        notes=(
+            "核心原始数据集，latest 不是简单今天，而是向前回看最近可用交易日。",
+            "历史回填应按交易日序列展开，不宜按自然日盲跑。",
+            "大量 metric_daily 基础指标直接依赖该表，优先保证稳定性而不是过早 generic 化。",
+        ),
+    ),
+    "bond_index": DatasetSpec(
+        dataset_id="bond_index",
+        source_name="ChinaBond Index",
+        table_name="raw_bond_index",
+        key_fields=("trade_date", "index_name"),
+        date_field="trade_date",
+        update_mode="upsert",
+        supports_latest=True,
+        latest_mode="today",
+        supports_backfill=False,
+        backfill_mode="none",
+        trading_day_sensitive=True,
+        notes=(
+            "当前实现是按单个 index_id 抓最新快照，再按 trade_date + index_name 去重落表。",
+            "未来若支持成体系回补，再补充更细的 backfill 语义。",
+        ),
+    ),
+    "policy_rate": DatasetSpec(
+        dataset_id="policy_rate",
+        source_name="PBC",
+        table_name="raw_policy_rate",
+        key_fields=("date", "type", "term"),
+        date_field="date",
+        update_mode="upsert",
+        supports_latest=True,
+        latest_mode="latest_event_batch",
+        supports_backfill=True,
+        backfill_mode="recent_n",
+        notes=(
+            "政策利率不是稳定日频表，而是事件批次型数据；一次抓取可能写入多条事件。",
+            "当前“补采”主要通过 recent_n 语义回看最近若干条事件，而不是按日期区间硬跑。",
+        ),
+    ),
+    "futures": DatasetSpec(
+        dataset_id="futures",
+        source_name="Sina Futures",
+        table_name="raw_futures",
+        key_fields=("date",),
+        date_field="date",
+        update_mode="upsert",
+        supports_latest=True,
+        latest_mode="today",
+        supports_backfill=False,
+        backfill_mode="none",
+        trading_day_sensitive=True,
+        notes=(
+            "当前抓的是最新一组国债期货快照，按 date 覆盖写入。",
+            "如果后续扩展到盘中多次采样，再考虑把 update_mode 改成更细的快照语义。",
+        ),
+    ),
+    "etf": DatasetSpec(
+        dataset_id="etf",
+        source_name="Jisilu",
+        table_name="raw_jisilu_etf",
+        key_fields=("snapshot_date", "fund_id"),
+        date_field="snapshot_date",
+        update_mode="append_snapshot",
+        supports_latest=True,
+        latest_mode="trading_day",
+        supports_backfill=False,
+        backfill_mode="none",
+        trading_day_sensitive=True,
+        prefer_trading_day_window=True,
+        notes=(
+            "ETF 表保留按交易日累积的全量快照，而不是只保留最新状态。",
+            "当前 latest job 已做同日 pre-check，避免重复抓取同一 snapshot_date。",
+        ),
+    ),
+    "qdii": DatasetSpec(
+        dataset_id="qdii",
+        source_name="Jisilu QDII",
+        table_name="raw_jisilu_qdii",
+        key_fields=("snapshot_date", "market", "fund_id"),
+        date_field="snapshot_date",
+        update_mode="append_snapshot",
+        supports_latest=True,
+        latest_mode="trading_day",
+        supports_backfill=False,
+        backfill_mode="none",
+        trading_day_sensitive=True,
+        prefer_trading_day_window=True,
+        notes=(
+            "QDII 和 ETF 虽然都来自集思录，但页面视图和字段语义不同，raw 层单独存表。",
+            "同一天同一 fund_id 在不同 market 视图下应视作不同业务键，因此主键保留 market 维度。",
+        ),
+    ),
+    "treasury": DatasetSpec(
+        dataset_id="treasury",
+        source_name="Jisilu Treasury",
+        table_name="raw_jisilu_treasury",
+        key_fields=("snapshot_date", "bond_id"),
+        date_field="snapshot_date",
+        update_mode="append_snapshot",
+        supports_latest=True,
+        latest_mode="trading_day",
+        supports_backfill=False,
+        backfill_mode="none",
+        trading_day_sensitive=True,
+        prefer_trading_day_window=True,
+        notes=(
+            "国债现券列表按交易日保留一份快照，便于后续观察收益率和活跃券横截面变化。",
+            "当前来源走 page_html 解析，不依赖 XHR 接口。",
+        ),
+    ),
+    "sse_lively_bond": DatasetSpec(
+        dataset_id="sse_lively_bond",
+        source_name="SSE Lively Bond",
+        table_name="raw_sse_lively_bond",
+        key_fields=("trade_date", "bond_id"),
+        date_field="trade_date",
+        update_mode="upsert",
+        supports_latest=True,
+        latest_mode="latest_available_with_lookback",
+        supports_backfill=False,
+        backfill_mode="none",
+        trading_day_sensitive=True,
+        prefer_trading_day_window=True,
+        notes=(
+            "上交所活跃国债榜单更像最近交易日横截面，不一定等于运行当天。",
+            "当前来源是 JSONP 接口，trade_date 以接口返回字段为准。",
+        ),
+    ),
+    "life_asset": DatasetSpec(
+        dataset_id="life_asset",
+        source_name="StatsGov/SGE/BOC Placeholder",
+        table_name="raw_life_asset",
+        key_fields=("date",),
+        date_field="date",
+        update_mode="upsert",
+        supports_latest=True,
+        latest_mode="today",
+        supports_backfill=False,
+        backfill_mode="none",
+        notes=(
+            "当前是多来源拼接的占位型原始表，先保证主链路可运行。",
+            "后续来源补齐后，仍可沿用相同 dataset_id 扩展实现。",
+        ),
+    ),
+    "overseas_macro": DatasetSpec(
+        dataset_id="overseas_macro",
+        source_name="FRED + Alpha Vantage",
+        table_name="raw_overseas_macro",
+        key_fields=("date",),
+        date_field="date",
+        update_mode="upsert",
+        supports_latest=True,
+        latest_mode="today",
+        supports_backfill=False,
+        backfill_mode="none",
+        notes=(
+            "这是多来源拼接后的单日海外宏观快照表，最终按 date 覆盖写入。",
+            "执行窗口更偏北京时间早晨，但这是调度信息，应留在 job registry 而不是 dataset spec。",
+        ),
+    ),
+}
+
+
+def get_dataset_spec(dataset_id: str) -> DatasetSpec:
+    try:
+        return DATASET_REGISTRY[dataset_id]
+    except KeyError as exc:
+        # 调用方通常依赖这个异常尽早暴露“注册表里没有这个数据集”，
+        # 比在更深层执行时才发现配置缺失更容易排查。
+        raise ValueError(f"unknown dataset: {dataset_id}") from exc

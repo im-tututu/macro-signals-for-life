@@ -14,6 +14,14 @@ FRED_OBSERVATIONS_URL = "https://api.stlouisfed.org/fred/series/observations"
 class FredSource(BaseSource):
     """FRED 来源。
 
+    这是海外宏观数据里最稳定的一组官方/准官方时间序列来源。
+    在系统里它承担“海外宏观基础骨架”的角色，和 Alpha Vantage 这种补商品/
+    市场数据的来源是并列关系，不应该混成一个类。
+
+    access kind:
+    - `api`
+    - 典型特征是参数明确、返回 JSON 结构稳定、主要风险集中在 API key 和配额
+
     只负责：
     - 调 FRED API
     - 解析 observation
@@ -35,6 +43,7 @@ class FredSource(BaseSource):
         observations = data.get("observations", [])
         if not observations:
             raise ValueError(f"FRED observations empty: {series_id}")
+        # FRED 偶尔会在最新几条里给 "." 之类空值，所以会向后找第一个可用观测。
         for obs in observations:
             value = to_float(obs.get("value"))
             if value is None:

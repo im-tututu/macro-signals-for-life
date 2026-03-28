@@ -61,6 +61,9 @@ SHEET_MONEY_MARKET_LEGACY: Final[str] = "原始_货币"
 SHEET_FUTURES_RAW: Final[str] = "原始_国债期货"
 SHEET_LIFE_ASSET_RAW: Final[str] = "原始_民生与资产价格"
 SHEET_JISILU_ETF_RAW: Final[str] = "原始_指数ETF"
+SHEET_JISILU_QDII_RAW: Final[str] = "原始_QDII"
+SHEET_JISILU_TREASURY_RAW: Final[str] = "原始_国债现券"
+SHEET_SSE_LIVELY_BOND_RAW: Final[str] = "原始_上交所活跃国债"
 SHEET_BOND_INDEX_RAW: Final[str] = "原始_债券指数特征"
 SHEET_BOND_INDEX_LIST: Final[str] = "配置_债券指数清单"
 SHEET_JISILU_BOND_INDEX_CANDIDATE: Final[str] = "映射_Jisilu债券指数候选"
@@ -80,6 +83,9 @@ RAW_SHEET_NAMES: Final[list[str]] = [
     SHEET_FUTURES_RAW,
     SHEET_LIFE_ASSET_RAW,
     SHEET_JISILU_ETF_RAW,
+    SHEET_JISILU_QDII_RAW,
+    SHEET_JISILU_TREASURY_RAW,
+    SHEET_SSE_LIVELY_BOND_RAW,
     SHEET_BOND_INDEX_RAW,
     SHEET_BOND_INDEX_LIST,
     SHEET_JISILU_BOND_INDEX_CANDIDATE,
@@ -100,6 +106,9 @@ TABLE_RAW_MONEY_MARKET: Final[str] = "raw_money_market"
 TABLE_RAW_FUTURES: Final[str] = "raw_futures"
 TABLE_RAW_LIFE_ASSET: Final[str] = "raw_life_asset"
 TABLE_RAW_JISILU_ETF: Final[str] = "raw_jisilu_etf"
+TABLE_RAW_JISILU_QDII: Final[str] = "raw_jisilu_qdii"
+TABLE_RAW_JISILU_TREASURY: Final[str] = "raw_jisilu_treasury"
+TABLE_RAW_SSE_LIVELY_BOND: Final[str] = "raw_sse_lively_bond"
 TABLE_RAW_BOND_INDEX: Final[str] = "raw_bond_index"
 TABLE_METRICS: Final[str] = "metrics"
 TABLE_SIGNAL_MAIN: Final[str] = "signal_main"
@@ -117,6 +126,9 @@ RAW_TABLES: Final[list[str]] = [
     TABLE_RAW_FUTURES,
     TABLE_RAW_LIFE_ASSET,
     TABLE_RAW_JISILU_ETF,
+    TABLE_RAW_JISILU_QDII,
+    TABLE_RAW_JISILU_TREASURY,
+    TABLE_RAW_SSE_LIVELY_BOND,
     TABLE_RAW_BOND_INDEX,
 ]
 
