@@ -170,22 +170,6 @@ DATASET_REGISTRY: dict[str, DatasetSpec] = {
             "当前来源是 JSONP 接口，trade_date 以接口返回字段为准。",
         ),
     ),
-    "life_asset": DatasetSpec(
-        dataset_id="life_asset",
-        source_name="StatsGov/SGE/BOC Placeholder",
-        table_name="raw_life_asset",
-        key_fields=("date",),
-        date_field="date",
-        update_mode="upsert",
-        supports_latest=True,
-        latest_mode="today",
-        supports_backfill=False,
-        backfill_mode="none",
-        notes=(
-            "当前是多来源拼接的占位型原始表，先保证主链路可运行。",
-            "后续来源补齐后，仍可沿用相同 dataset_id 扩展实现。",
-        ),
-    ),
     "overseas_macro": DatasetSpec(
         dataset_id="overseas_macro",
         source_name="FRED + Alpha Vantage",

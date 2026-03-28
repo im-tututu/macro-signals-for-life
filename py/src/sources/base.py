@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Generic, TypeVar
+from typing import Any, Generic, Literal, TypeVar
 
 from src.core.http import HttpClient
 
 T = TypeVar("T")
+AccessKind = Literal["api", "xhr_json", "xhr_html", "page_html", "file_download", "composite"]
 
 
 @dataclass(slots=True)
@@ -54,3 +55,44 @@ class BaseSource:
     def __init__(self, http: HttpClient | None = None) -> None:
         # 允许注入共享 HttpClient，方便统一 cookie / headers / 重试策略，也便于测试替换。
         self.http = http or HttpClient()
+
+    @staticmethod
+    def build_fetch_meta(
+        *,
+        provider: str,
+        fetched_at: str,
+        biz_date: str = "",
+        params: dict[str, Any] | None = None,
+        page_info: dict[str, Any] | None = None,
+        raw_sample: Any | None = None,
+        extra: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """构造来源层统一 meta。
+
+        约定字段尽量稳定，避免不同 source 在 `meta` 里自由发散。
+        """
+
+        meta: dict[str, Any] = {
+            "provider": provider,
+            "biz_date": biz_date,
+            "fetched_at": fetched_at,
+            "params": params or {},
+            "page_info": page_info or {},
+            "raw_sample": raw_sample,
+        }
+        if extra:
+            meta.update(extra)
+        return meta
+
+    @staticmethod
+    def require_text(value: str, *, field_name: str) -> str:
+        text = str(value or "").strip()
+        if not text:
+            raise ValueError(f"missing required field: {field_name}")
+        return text
+
+    @staticmethod
+    def require_rows(rows: list[Any], *, field_name: str = "rows") -> list[Any]:
+        if not rows:
+            raise ValueError(f"{field_name} is empty")
+        return rows

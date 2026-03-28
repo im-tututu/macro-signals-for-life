@@ -43,13 +43,13 @@ class ChinaMoneySource(BaseSource):
             for item in node:
                 yield from ChinaMoneySource._iter_objects(item)
 
-    def fetch_money_market_snapshot(self) -> MoneyMarketSnapshot:
+    def _snapshot_from_payload(self, data: Any) -> MoneyMarketSnapshot:
         # ChinaMoney 的 JSON 结构偶尔会变形，所以这里先尽量走“显式字段”路径，
         # 再退回到递归扫描，优先保证日常抓取稳住。
-        data = self.http.get_json(CHINAMONEY_PRR_MD_URL)
         fields: Dict[str, Any] = {}
         data_block = data.get("data", {}) if isinstance(data, dict) else {}
         record_date = norm_ymd(data_block.get("showDateCN")) or today_ymd()
+        fetched_at = now_text()
 
         records = data.get("records", []) if isinstance(data, dict) else []
         if isinstance(records, list) and records:
@@ -65,7 +65,9 @@ class ChinaMoneySource(BaseSource):
                     fields[f"{code}_latestRate"] = latest
                 if code and avg_prd is not None:
                     fields[f"{code}_avgPrd"] = avg_prd
-            return MoneyMarketSnapshot(date=record_date, source=CHINAMONEY_PRR_MD_URL, fields=fields, fetched_at=now_text())
+            if not fields:
+                raise ValueError("ChinaMoney snapshot missing parsed fields")
+            return MoneyMarketSnapshot(date=record_date, source=CHINAMONEY_PRR_MD_URL, fields=fields, fetched_at=fetched_at)
 
         for obj in self._iter_objects(data):
             name = str(obj.get("name") or obj.get("label") or obj.get("termName") or obj.get("term") or "")
@@ -82,7 +84,12 @@ class ChinaMoneySource(BaseSource):
                 fields.setdefault("R007_weightedRate", weighted)
             if "R001" in key.upper() or name.upper() == "R001":
                 fields.setdefault("R001_weightedRate", weighted)
-        return MoneyMarketSnapshot(date=record_date, source=CHINAMONEY_PRR_MD_URL, fields=fields, fetched_at=now_text())
+        if not fields:
+            raise ValueError("ChinaMoney snapshot missing parsed fields")
+        return MoneyMarketSnapshot(date=record_date, source=CHINAMONEY_PRR_MD_URL, fields=fields, fetched_at=fetched_at)
+
+    def fetch_money_market_snapshot(self) -> MoneyMarketSnapshot:
+        return self._snapshot_from_payload(self.http.get_json(CHINAMONEY_PRR_MD_URL))
 
     @classmethod
     def derive_business_date(cls, payload: Dict[str, Any]) -> str:
@@ -95,14 +102,26 @@ class ChinaMoneySource(BaseSource):
 
     def fetch_money_market(self) -> FetchResult[MoneyMarketSnapshot]:
         payload = self.http.get_json(CHINAMONEY_PRR_MD_URL)
-        snapshot = self.fetch_money_market_snapshot()
+        snapshot = self._snapshot_from_payload(payload)
         # 业务日期比“抓取日期”更重要，后续落表和比对都应尽量对齐业务日期。
-        snapshot.date = self.derive_business_date(payload)
+        snapshot.date = self.require_text(self.derive_business_date(payload), field_name="biz_date")
         data_block = payload.get("data", {}) if isinstance(payload, dict) else {}
+        if not snapshot.fields:
+            raise ValueError("ChinaMoney snapshot fields are empty")
         return FetchResult(
             payload=snapshot,
             source_url=CHINAMONEY_PRR_MD_URL,
-            meta={"show_date_cn": str(data_block.get("showDateCN") or "")},
+            meta=self.build_fetch_meta(
+                provider="ChinaMoney",
+                biz_date=snapshot.date,
+                fetched_at=snapshot.fetched_at,
+                params={"endpoint": "prr-md"},
+                page_info={"field_count": len(snapshot.fields)},
+                raw_sample=payload if isinstance(payload, dict) else None,
+                extra={
+                    "show_date_cn": str(data_block.get("showDateCN") or ""),
+                },
+            ),
         )
 
     def fetch_chart_csv(self, url: str) -> List[Dict[str, str]]:

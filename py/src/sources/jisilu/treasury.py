@@ -8,6 +8,7 @@ try:
 except ImportError:  # pragma: no cover - optional dependency guard
     BeautifulSoup = None
 
+from src.core.models import JisiluTreasuryRowSnapshot, JisiluTreasurySnapshot
 from src.core.utils import now_text, today_ymd
 from src.core.config import settings
 
@@ -102,18 +103,34 @@ class JisiluTreasurySource(BaseSource):
         url: str = JISILU_TREASURY_ALL_URL,
         *,
         snapshot_date: str | None = None,
-    ) -> FetchResult[list[dict[str, Any]]]:
+    ) -> FetchResult[JisiluTreasurySnapshot]:
         rows = self.fetch_treasury_rows(url)
-        return FetchResult(
-            payload=rows,
+        target_snapshot_date = self.require_text(snapshot_date or today_ymd(), field_name="snapshot_date")
+        fetched_at = now_text()
+        row_snapshots = [
+            JisiluTreasuryRowSnapshot(
+                bond_id=self.require_text(str(row.get("bond_id") or ""), field_name="bond_id"),
+                fields=dict(row),
+            )
+            for row in self.require_rows(rows)
+        ]
+        snapshot = JisiluTreasurySnapshot(
+            snapshot_date=target_snapshot_date,
+            fetched_at=fetched_at,
             source_url=url,
-            meta={
-                "provider": "JISILU",
-                "category": "treasury",
-                "row_count": len(rows),
-                "snapshot_date": snapshot_date or today_ymd(),
-                "fetched_at": now_text(),
-                "raw_url": url,
-                "raw_json": json.dumps(rows[:3], ensure_ascii=False, default=str),
-            },
+            rows=row_snapshots,
+            meta={"raw_preview": rows[:3]},
+        )
+        return FetchResult(
+            payload=snapshot,
+            source_url=url,
+            meta=self.build_fetch_meta(
+                provider="JISILU",
+                biz_date=snapshot.snapshot_date,
+                fetched_at=snapshot.fetched_at,
+                params={"url": url},
+                page_info={"row_count": len(snapshot.rows)},
+                raw_sample=json.dumps(rows[:3], ensure_ascii=False, default=str),
+                extra={"category": "treasury"},
+            ),
         )

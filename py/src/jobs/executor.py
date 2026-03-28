@@ -12,7 +12,6 @@ from .ingest import (
     fetch_bond_index_duration,
     fetch_latest_etf_snapshot,
     fetch_latest_futures,
-    fetch_latest_life_asset,
     fetch_latest_money_market,
     fetch_latest_qdii_snapshot,
     fetch_latest_sse_lively_bond_snapshot,
@@ -49,7 +48,6 @@ SIMPLE_LATEST_HANDLERS: dict[str, SimpleLatestHandler] = {
     "money_market": fetch_latest_money_market,
     "policy_rate": fetch_latest_policy_rate,
     "futures": fetch_latest_futures,
-    "life_asset": fetch_latest_life_asset,
     "overseas_macro": fetch_latest_overseas_macro,
 }
 

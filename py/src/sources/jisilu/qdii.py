@@ -6,6 +6,7 @@ import os
 import time
 from typing import Any, Dict, List, Literal
 
+from src.core.models import JisiluQdiiRowSnapshot, JisiluQdiiSnapshot
 from src.core.config import settings
 from src.core.notify import build_notifier
 from src.core.utils import now_text, today_ymd
@@ -150,7 +151,7 @@ class JisiluQdiiSource(BaseSource):
         snapshot_date: str | None = None,
         rows_per_page: int = 50,
         max_pages: int = 20,
-    ) -> Dict[str, Any]:
+    ) -> JisiluQdiiSnapshot:
         refreshed = False
         while True:
             try:
@@ -173,7 +174,7 @@ class JisiluQdiiSource(BaseSource):
         snapshot_date: str | None = None,
         rows_per_page: int = 50,
         max_pages: int = 20,
-    ) -> Dict[str, Any]:
+    ) -> JisiluQdiiSnapshot:
         all_rows: List[Dict[str, Any]] = []
         records_total: Any = ""
         last_payload: Dict[str, Any] = {}
@@ -217,17 +218,36 @@ class JisiluQdiiSource(BaseSource):
             if len(rows) < rows_per_page:
                 break
 
-        return {
-            "market": market,
-            "market_code": self.market_code(market),
-            "snapshot_date": snapshot_date or today_ymd(),
-            "fetched_at": now_text(),
-            "records": records_total,
-            "rows": all_rows,
-            "last_url": self.build_list_url(market),
-            "raw": last_payload,
-            "unique_rows": len(all_rows),
-        }
+        target_snapshot_date = self.require_text(snapshot_date or today_ymd(), field_name="snapshot_date")
+        market_code = self.market_code(market)
+        fetched_at = now_text()
+        row_snapshots: List[JisiluQdiiRowSnapshot] = []
+        for row in self.require_rows(all_rows):
+            cell = row.get("cell", row) if isinstance(row, dict) else {}
+            fund_id = self.require_text(str(cell.get("fund_id") or row.get("id") or ""), field_name="fund_id")
+            row_snapshots.append(
+                JisiluQdiiRowSnapshot(
+                    market=market,
+                    market_code=market_code,
+                    fund_id=fund_id,
+                    cell=dict(cell),
+                    raw_row=dict(row),
+                )
+            )
+
+        return JisiluQdiiSnapshot(
+            snapshot_date=target_snapshot_date,
+            fetched_at=fetched_at,
+            source_url=self.build_list_url(market),
+            market=market,
+            market_code=market_code,
+            records_total=records_total,
+            rows=row_snapshots,
+            meta={
+                "last_payload": last_payload,
+                "unique_rows": len(row_snapshots),
+            },
+        )
 
     def fetch_qdii_all_result(
         self,
@@ -236,20 +256,34 @@ class JisiluQdiiSource(BaseSource):
         snapshot_date: str | None = None,
         rows_per_page: int = 50,
         max_pages: int = 20,
-    ) -> FetchResult[Dict[str, Any]]:
-        payload = self.fetch_qdii_all(
+    ) -> FetchResult[JisiluQdiiSnapshot]:
+        snapshot = self.fetch_qdii_all(
             market=market,
             snapshot_date=snapshot_date,
             rows_per_page=rows_per_page,
             max_pages=max_pages,
         )
         return FetchResult(
-            payload=payload,
+            payload=snapshot,
             source_url=self.build_list_url(market),
-            meta={
-                "market": market,
-                "market_code": self.market_code(market),
-                "rows_per_page": rows_per_page,
-                "max_pages": max_pages,
-            },
+            meta=self.build_fetch_meta(
+                provider="JISILU",
+                biz_date=snapshot.snapshot_date,
+                fetched_at=snapshot.fetched_at,
+                params={
+                    "market": market,
+                    "market_code": self.market_code(market),
+                    "rows_per_page": rows_per_page,
+                    "max_pages": max_pages,
+                },
+                page_info={
+                    "records_total": snapshot.records_total,
+                    "unique_rows": len(snapshot.rows),
+                },
+                raw_sample=snapshot.meta.get("last_payload"),
+                extra={
+                    "market": snapshot.market,
+                    "market_code": snapshot.market_code,
+                },
+            ),
         )

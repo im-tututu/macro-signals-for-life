@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import asdict
 from typing import Iterable, List, Optional
 from urllib.parse import urljoin
 
@@ -411,17 +412,37 @@ class PbcSource(BaseSource):
         events.extend(self.fetch_recent_omo_events(limit=limit))
         events.extend(self.fetch_recent_mlf_events(limit=limit))
         events.extend(self.fetch_recent_lpr_events(limit=limit))
+        payload = self._sort_events_desc(self._dedupe(events))
+        self.require_rows(payload, field_name="policy_rate_events")
         return FetchResult(
-            payload=self._sort_events_desc(self._dedupe(events)),
+            payload=payload,
             source_url=PBC_OMO_LIST_URL,
-            meta={"provider": "PBC", "event_scope": "recent_all", "limit_per_type": limit},
+            meta=self.build_fetch_meta(
+                provider="PBC",
+                biz_date=str(payload[0].date or ""),
+                fetched_at=str(payload[0].fetched_at or ""),
+                params={"event_scope": "recent_all", "limit_per_type": limit},
+                page_info={"event_count": len(payload)},
+                raw_sample=[asdict(item) for item in payload[:3]],
+                extra={"event_scope": "recent_all"},
+            ),
         )
 
     def fetch_latest_policy_rate_events_result(self) -> FetchResult[List[PolicyRateEvent]]:
         """统一返回最新政策事件结果。"""
 
+        payload = self.fetch_latest_policy_rate_events()
+        self.require_rows(payload, field_name="policy_rate_events")
         return FetchResult(
-            payload=self.fetch_latest_policy_rate_events(),
+            payload=payload,
             source_url=PBC_OMO_LIST_URL,
-            meta={"provider": "PBC", "event_scope": "latest"},
+            meta=self.build_fetch_meta(
+                provider="PBC",
+                biz_date=str(payload[0].date or ""),
+                fetched_at=str(payload[0].fetched_at or ""),
+                params={"event_scope": "latest"},
+                page_info={"event_count": len(payload)},
+                raw_sample=[asdict(item) for item in payload[:3]],
+                extra={"event_scope": "latest"},
+            ),
         )

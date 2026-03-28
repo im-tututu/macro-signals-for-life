@@ -81,12 +81,6 @@ def fetch_latest_sse_lively_bond_snapshot(*args, **kwargs):
     return _fetch_latest_sse_lively_bond_snapshot(*args, **kwargs)
 
 
-def fetch_latest_life_asset(*args, **kwargs):
-    from .ingest import fetch_latest_life_asset as _fetch_latest_life_asset
-
-    return _fetch_latest_life_asset(*args, **kwargs)
-
-
 def fetch_bond_index_duration(*args, **kwargs):
     from .ingest import fetch_bond_index_duration as _fetch_bond_index_duration
 
@@ -106,7 +100,6 @@ __all__ = [
     "fetch_latest_qdii_snapshot",
     "fetch_latest_treasury_snapshot",
     "fetch_latest_sse_lively_bond_snapshot",
-    "fetch_latest_life_asset",
     "fetch_bond_index_duration",
     "DAILY_JOB_REGISTRY",
     "get_daily_job_spec",

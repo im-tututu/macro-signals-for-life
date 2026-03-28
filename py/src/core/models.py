@@ -76,3 +76,73 @@ class BondIndexSnapshot:
     convexity: Optional[float]
     source: str
     meta: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class JisiluEtfRowSnapshot:
+    fund_id: str
+    cell: Dict[str, Any]
+    raw_row: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class JisiluEtfSnapshot:
+    snapshot_date: str
+    fetched_at: str
+    source_url: str
+    records_total: Any
+    rows: List[JisiluEtfRowSnapshot]
+    meta: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class JisiluQdiiRowSnapshot:
+    market: str
+    market_code: str
+    fund_id: str
+    cell: Dict[str, Any]
+    raw_row: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class JisiluQdiiSnapshot:
+    snapshot_date: str
+    fetched_at: str
+    source_url: str
+    market: str
+    market_code: str
+    records_total: Any
+    rows: List[JisiluQdiiRowSnapshot]
+    meta: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class JisiluTreasuryRowSnapshot:
+    bond_id: str
+    fields: Dict[str, Any]
+
+
+@dataclass(slots=True)
+class JisiluTreasurySnapshot:
+    snapshot_date: str
+    fetched_at: str
+    source_url: str
+    rows: List[JisiluTreasuryRowSnapshot]
+    meta: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class SseLivelyBondRowSnapshot:
+    trade_date: str
+    bond_id: str
+    fields: Dict[str, Any]
+
+
+@dataclass(slots=True)
+class SseLivelyBondSnapshot:
+    snapshot_date: str
+    fetched_at: str
+    source_url: str
+    rows: List[SseLivelyBondRowSnapshot]
+    total_count: int
+    meta: Dict[str, Any] = field(default_factory=dict)

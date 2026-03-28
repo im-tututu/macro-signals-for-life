@@ -66,8 +66,18 @@ class SinaFuturesSource(BaseSource):
         )
 
     def fetch_bond_futures_result(self) -> FetchResult[FuturesSnapshot]:
+        snapshot = self.fetch_bond_futures_snapshot()
+        if all(value is None for value in snapshot.values.values()):
+            raise ValueError("Sina futures snapshot missing all tracked prices")
         return FetchResult(
-            payload=self.fetch_bond_futures_snapshot(),
+            payload=snapshot,
             source_url=SINA_FUTURES_QUOTE_URL,
-            meta={"provider": "SINA_FUTURES"},
+            meta=self.build_fetch_meta(
+                provider="SINA_FUTURES",
+                biz_date=snapshot.date,
+                fetched_at=snapshot.fetched_at,
+                params={"symbols": ["T0", "TF0"]},
+                page_info={"tracked_fields": list(snapshot.values.keys())},
+                raw_sample=snapshot.values,
+            ),
         )

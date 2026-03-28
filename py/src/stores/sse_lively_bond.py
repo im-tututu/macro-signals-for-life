@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from src.core.config import TABLE_RAW_SSE_LIVELY_BOND
+from src.core.models import SseLivelyBondRowSnapshot, SseLivelyBondSnapshot
 from src.core.utils import norm_ymd, to_float
 from src.sources.base import FetchResult
 from .base import BaseSqliteStore, TableSpec
@@ -66,34 +67,39 @@ class SseLivelyBondStore(BaseSqliteStore):
     @staticmethod
     def build_row_from_payload_row(
         fetched_at: str,
-        row: dict[str, Any],
+        row: SseLivelyBondRowSnapshot,
         *,
         source_url: str = "",
     ) -> dict[str, Any]:
+        fields = row.fields
         return {
-            "trade_date": norm_ymd(row.get("TRADE_DATE")),
+            "trade_date": row.trade_date,
             "fetched_at": fetched_at,
-            "rank_num": int(float(row["NUM"])) if str(row.get("NUM") or "").strip() else None,
-            "bond_id": str(row.get("SEC_CODE") or ""),
-            "bond_nm": str(row.get("SEC_NAME") or ""),
-            "bond_nm_full": str(row.get("SECURITY_ABBR_FULL") or ""),
-            "open_price": to_float(row.get("OPEN_PRICE")),
-            "close_price": to_float(row.get("CLOSE_PRICE")),
-            "change_ratio": to_float(row.get("SUM_CHANGE_RATIO")),
-            "amplitude": to_float(row.get("QJZF")),
-            "volume_hand": to_float(row.get("SUM_TRADE_VOL")),
-            "amount_wanyuan": to_float(row.get("SUM_TRADE_AMT")),
-            "ytm": to_float(row.get("SUM_TO_RATE")),
+            "rank_num": int(float(fields["NUM"])) if str(fields.get("NUM") or "").strip() else None,
+            "bond_id": row.bond_id,
+            "bond_nm": str(fields.get("SEC_NAME") or ""),
+            "bond_nm_full": str(fields.get("SECURITY_ABBR_FULL") or ""),
+            "open_price": to_float(fields.get("OPEN_PRICE")),
+            "close_price": to_float(fields.get("CLOSE_PRICE")),
+            "change_ratio": to_float(fields.get("SUM_CHANGE_RATIO")),
+            "amplitude": to_float(fields.get("QJZF")),
+            "volume_hand": to_float(fields.get("SUM_TRADE_VOL")),
+            "amount_wanyuan": to_float(fields.get("SUM_TRADE_AMT")),
+            "ytm": to_float(fields.get("SUM_TO_RATE")),
             "source_url": source_url,
-            "raw_json": json.dumps(row, ensure_ascii=False, sort_keys=True, default=str),
+            "raw_json": json.dumps(fields, ensure_ascii=False, sort_keys=True, default=str),
         }
 
     @classmethod
-    def build_rows_from_fetch_result(cls, fetch_result: FetchResult[dict[str, Any]]) -> list[dict[str, Any]]:
+    def build_rows_from_fetch_result(cls, fetch_result: FetchResult[SseLivelyBondSnapshot]) -> list[dict[str, Any]]:
         payload = fetch_result.payload
-        fetched_at = str(payload.get("fetched_at") or fetch_result.meta.get("fetched_at") or "")
-        source_url = str(fetch_result.source_url or "")
-        rows = payload.get("rows", []) or []
+        fetched_at = str(payload.fetched_at or fetch_result.meta.get("fetched_at") or "")
+        source_url = str(payload.source_url or fetch_result.source_url or "")
+        rows = payload.rows or []
+        if not fetched_at:
+            raise ValueError("SSE lively bond snapshot missing fetched_at")
+        if not rows:
+            raise ValueError("SSE lively bond snapshot rows are empty")
         return [
             cls.build_row_from_payload_row(
                 fetched_at,

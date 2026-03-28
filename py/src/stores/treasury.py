@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from src.core.config import TABLE_RAW_JISILU_TREASURY
+from src.core.models import JisiluTreasuryRowSnapshot, JisiluTreasurySnapshot
 from src.core.utils import norm_ymd, to_float
 from src.sources.base import FetchResult
 from .base import BaseSqliteStore, TableSpec
@@ -73,40 +74,47 @@ class TreasuryStore(BaseSqliteStore):
     def build_row_from_payload_row(
         snapshot_date: str,
         fetched_at: str,
-        row: dict[str, Any],
+        row: JisiluTreasuryRowSnapshot,
         *,
         source_url: str = "",
     ) -> dict[str, Any]:
+        fields = row.fields
         return {
             "snapshot_date": snapshot_date,
             "fetched_at": fetched_at,
-            "bond_id": str(row.get("bond_id") or ""),
-            "bond_nm": str(row.get("bond_nm") or ""),
-            "price": to_float(row.get("price")),
-            "full_price": to_float(row.get("full_price")),
-            "increase_rt": to_float(row.get("increase_rt")),
-            "volume_wan": to_float(row.get("volume_wan")),
-            "ask_1": to_float(row.get("ask_1")),
-            "bid_1": to_float(row.get("bid_1")),
-            "days_to_coupon": to_float(row.get("days_to_coupon")),
-            "years_left": to_float(row.get("years_left")),
-            "duration": to_float(row.get("duration")),
-            "ytm": to_float(row.get("ytm")),
-            "coupon_rt": to_float(row.get("coupon_rt")),
-            "repo_ratio": to_float(row.get("repo_ratio")),
-            "repo_usage_rt": to_float(row.get("repo_usage_rt")),
-            "maturity_dt": norm_ymd(row.get("maturity_dt")),
-            "size_yi": to_float(row.get("size_yi")),
+            "bond_id": row.bond_id,
+            "bond_nm": str(fields.get("bond_nm") or ""),
+            "price": to_float(fields.get("price")),
+            "full_price": to_float(fields.get("full_price")),
+            "increase_rt": to_float(fields.get("increase_rt")),
+            "volume_wan": to_float(fields.get("volume_wan")),
+            "ask_1": to_float(fields.get("ask_1")),
+            "bid_1": to_float(fields.get("bid_1")),
+            "days_to_coupon": to_float(fields.get("days_to_coupon")),
+            "years_left": to_float(fields.get("years_left")),
+            "duration": to_float(fields.get("duration")),
+            "ytm": to_float(fields.get("ytm")),
+            "coupon_rt": to_float(fields.get("coupon_rt")),
+            "repo_ratio": to_float(fields.get("repo_ratio")),
+            "repo_usage_rt": to_float(fields.get("repo_usage_rt")),
+            "maturity_dt": norm_ymd(fields.get("maturity_dt")),
+            "size_yi": to_float(fields.get("size_yi")),
             "source_url": source_url,
-            "raw_json": json.dumps(row, ensure_ascii=False, sort_keys=True, default=str),
+            "raw_json": json.dumps(fields, ensure_ascii=False, sort_keys=True, default=str),
         }
 
     @classmethod
-    def build_rows_from_fetch_result(cls, fetch_result: FetchResult[list[dict[str, Any]]]) -> list[dict[str, Any]]:
+    def build_rows_from_fetch_result(cls, fetch_result: FetchResult[JisiluTreasurySnapshot]) -> list[dict[str, Any]]:
         payload = fetch_result.payload
-        snapshot_date = str(fetch_result.meta.get("snapshot_date") or "")
-        fetched_at = str(fetch_result.meta.get("fetched_at") or "")
-        source_url = str(fetch_result.source_url or fetch_result.meta.get("raw_url") or "")
+        snapshot_date = str(payload.snapshot_date or "")
+        fetched_at = str(payload.fetched_at or "")
+        source_url = str(payload.source_url or fetch_result.source_url or "")
+        if not snapshot_date:
+            raise ValueError("Treasury snapshot missing snapshot_date")
+        if not fetched_at:
+            raise ValueError("Treasury snapshot missing fetched_at")
+        if not payload.rows:
+            raise ValueError("Treasury snapshot rows are empty")
         return [
             cls.build_row_from_payload_row(
                 snapshot_date,
@@ -114,5 +122,5 @@ class TreasuryStore(BaseSqliteStore):
                 row,
                 source_url=source_url,
             )
-            for row in payload
+            for row in payload.rows
         ]

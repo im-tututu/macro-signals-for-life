@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from src.core.config import TABLE_RAW_JISILU_ETF
+from src.core.models import JisiluEtfRowSnapshot, JisiluEtfSnapshot
 from src.core.utils import to_float
 from src.sources.base import FetchResult
 from .base import BaseSqliteStore, TableSpec
@@ -88,18 +89,18 @@ class EtfStore(BaseSqliteStore):
     def build_row_from_payload_row(
         snapshot_date: str,
         fetched_at: str,
-        row: dict[str, Any],
+        row: JisiluEtfRowSnapshot,
         *,
         records_total: Any = "",
         source_url: str = "",
     ) -> dict[str, Any]:
         """把单条集思录 row 转成表行。"""
 
-        cell = row.get("cell", row) if isinstance(row, dict) else {}
+        cell = row.cell
         return {
             "snapshot_date": snapshot_date,
             "fetched_at": fetched_at,
-            "fund_id": str(cell.get("fund_id") or row.get("id") or ""),
+            "fund_id": row.fund_id,
             "fund_nm": str(cell.get("fund_nm") or ""),
             "index_nm": str(cell.get("index_nm") or ""),
             "issuer_nm": str(cell.get("issuer_nm") or ""),
@@ -126,15 +127,21 @@ class EtfStore(BaseSqliteStore):
         }
 
     @classmethod
-    def build_rows_from_fetch_result(cls, fetch_result: FetchResult[dict[str, Any]]) -> list[dict[str, Any]]:
+    def build_rows_from_fetch_result(cls, fetch_result: FetchResult[JisiluEtfSnapshot]) -> list[dict[str, Any]]:
         """把 source 返回的 ETF 快照结果转成多条表行。"""
 
         payload = fetch_result.payload
-        snapshot_date = str(payload.get("snapshot_date") or "")
-        fetched_at = str(payload.get("fetched_at") or "")
-        rows = payload.get("rows", []) or []
-        records_total = payload.get("records", "")
-        source_url = str(payload.get("last_url") or fetch_result.source_url or "")
+        snapshot_date = str(payload.snapshot_date or "")
+        fetched_at = str(payload.fetched_at or "")
+        rows = payload.rows or []
+        records_total = payload.records_total
+        source_url = str(payload.source_url or fetch_result.source_url or "")
+        if not snapshot_date:
+            raise ValueError("ETF snapshot missing snapshot_date")
+        if not fetched_at:
+            raise ValueError("ETF snapshot missing fetched_at")
+        if not rows:
+            raise ValueError("ETF snapshot rows are empty")
         return [
             cls.build_row_from_payload_row(
                 snapshot_date,

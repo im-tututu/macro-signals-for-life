@@ -170,16 +170,6 @@ DAILY_JOB_REGISTRY: dict[str, DailyJobSpec] = {
             "job 内已做 pre-check：同一 snapshot_date 已抓过则跳过。",
         ),
     ),
-    "life_asset": DailyJobSpec(
-        job_name="life_asset",
-        source_type="life_asset_placeholder",
-        execution_key="simple_latest",
-        cadence="daily",
-        region="CN",
-        suggested_schedule=CN_NIGHT_SCHEDULE,
-        dataset_id="life_asset",
-        notes=("当前仍以占位链路为主，后续来源补齐后继续沿用国内晚间窗口。",),
-    ),
     "qdii": DailyJobSpec(
         job_name="qdii",
         source_type="jisilu_qdii",

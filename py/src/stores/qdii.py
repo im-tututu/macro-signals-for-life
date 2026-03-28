@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from src.core.config import TABLE_RAW_JISILU_QDII
+from src.core.models import JisiluQdiiRowSnapshot, JisiluQdiiSnapshot
 from src.core.utils import strip_tags, to_float
 from src.sources.base import FetchResult
 from .base import BaseSqliteStore, TableSpec
@@ -142,19 +143,19 @@ class QdiiStore(BaseSqliteStore):
         fetched_at: str,
         market: str,
         market_code: str,
-        row: dict[str, Any],
+        row: JisiluQdiiRowSnapshot,
         *,
         records_total: Any = "",
         source_url: str = "",
     ) -> dict[str, Any]:
-        cell = row.get("cell", row) if isinstance(row, dict) else {}
+        cell = row.cell
         fund_nm = str(cell.get("fund_nm") or cell.get("fund_name") or "")
         return {
             "snapshot_date": snapshot_date,
             "fetched_at": fetched_at,
             "market": market,
             "market_code": market_code,
-            "fund_id": str(cell.get("fund_id") or row.get("id") or ""),
+            "fund_id": row.fund_id,
             "fund_nm": fund_nm,
             "fund_nm_display": strip_tags(str(cell.get("fund_nm_color") or fund_nm)),
             "qtype": str(cell.get("qtype") or ""),
@@ -209,15 +210,23 @@ class QdiiStore(BaseSqliteStore):
         }
 
     @classmethod
-    def build_rows_from_fetch_result(cls, fetch_result: FetchResult[dict[str, Any]]) -> list[dict[str, Any]]:
+    def build_rows_from_fetch_result(cls, fetch_result: FetchResult[JisiluQdiiSnapshot]) -> list[dict[str, Any]]:
         payload = fetch_result.payload
-        snapshot_date = str(payload.get("snapshot_date") or "")
-        fetched_at = str(payload.get("fetched_at") or "")
-        market = str(payload.get("market") or "")
-        market_code = str(payload.get("market_code") or "")
-        rows = payload.get("rows", []) or []
-        records_total = payload.get("records", "")
-        source_url = str(payload.get("last_url") or fetch_result.source_url or "")
+        snapshot_date = str(payload.snapshot_date or "")
+        fetched_at = str(payload.fetched_at or "")
+        market = str(payload.market or "")
+        market_code = str(payload.market_code or "")
+        rows = payload.rows or []
+        records_total = payload.records_total
+        source_url = str(payload.source_url or fetch_result.source_url or "")
+        if not snapshot_date:
+            raise ValueError("QDII snapshot missing snapshot_date")
+        if not fetched_at:
+            raise ValueError("QDII snapshot missing fetched_at")
+        if not market or not market_code:
+            raise ValueError("QDII snapshot missing market identity")
+        if not rows:
+            raise ValueError("QDII snapshot rows are empty")
         return [
             cls.build_row_from_payload_row(
                 snapshot_date,

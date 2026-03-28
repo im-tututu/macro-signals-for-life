@@ -59,7 +59,6 @@ SHEET_POLICY_RATE_RAW: Final[str] = "原始_政策利率"
 SHEET_MONEY_MARKET_RAW: Final[str] = "原始_资金面"
 SHEET_MONEY_MARKET_LEGACY: Final[str] = "原始_货币"
 SHEET_FUTURES_RAW: Final[str] = "原始_国债期货"
-SHEET_LIFE_ASSET_RAW: Final[str] = "原始_民生与资产价格"
 SHEET_JISILU_ETF_RAW: Final[str] = "原始_指数ETF"
 SHEET_JISILU_QDII_RAW: Final[str] = "原始_QDII"
 SHEET_JISILU_TREASURY_RAW: Final[str] = "原始_国债现券"
@@ -81,7 +80,6 @@ RAW_SHEET_NAMES: Final[list[str]] = [
     SHEET_MONEY_MARKET_RAW,
     SHEET_MONEY_MARKET_LEGACY,
     SHEET_FUTURES_RAW,
-    SHEET_LIFE_ASSET_RAW,
     SHEET_JISILU_ETF_RAW,
     SHEET_JISILU_QDII_RAW,
     SHEET_JISILU_TREASURY_RAW,
@@ -104,7 +102,6 @@ TABLE_RAW_OVERSEAS_MACRO: Final[str] = "raw_overseas_macro"
 TABLE_RAW_POLICY_RATE: Final[str] = "raw_policy_rate"
 TABLE_RAW_MONEY_MARKET: Final[str] = "raw_money_market"
 TABLE_RAW_FUTURES: Final[str] = "raw_futures"
-TABLE_RAW_LIFE_ASSET: Final[str] = "raw_life_asset"
 TABLE_RAW_JISILU_ETF: Final[str] = "raw_jisilu_etf"
 TABLE_RAW_JISILU_QDII: Final[str] = "raw_jisilu_qdii"
 TABLE_RAW_JISILU_TREASURY: Final[str] = "raw_jisilu_treasury"
@@ -124,7 +121,6 @@ RAW_TABLES: Final[list[str]] = [
     TABLE_RAW_POLICY_RATE,
     TABLE_RAW_MONEY_MARKET,
     TABLE_RAW_FUTURES,
-    TABLE_RAW_LIFE_ASSET,
     TABLE_RAW_JISILU_ETF,
     TABLE_RAW_JISILU_QDII,
     TABLE_RAW_JISILU_TREASURY,
@@ -221,7 +217,6 @@ HEADER_SCAN_MAX_ROWS: Final[int] = 10
 BOND_INDEX_LIST_HEADER_MIN_HITS: Final[int] = 4
 LEGACY_SHEET_ALLOWANCES: Final[dict[str, list[str]]] = {
     SHEET_POLICY_RATE_RAW: ["extra_1", "extra_2"],
-    SHEET_LIFE_ASSET_RAW: ["deposit_1y_dup", "source_dup", "fetched_at_dup"],
 }
 
 

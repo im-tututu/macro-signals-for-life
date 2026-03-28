@@ -2,7 +2,6 @@ from .bond_curves import BondCurveStore
 from .bond_index import BondIndexStore
 from .etf import EtfStore
 from .futures import FuturesStore
-from .life_asset import LifeAssetStore
 from .metrics import MetricsStore
 from .money_market import MoneyMarketStore
 from .overseas import OverseasStore
@@ -18,7 +17,6 @@ __all__ = [
     "BondIndexStore",
     "EtfStore",
     "FuturesStore",
-    "LifeAssetStore",
     "MetricsStore",
     "MoneyMarketStore",
     "OverseasStore",

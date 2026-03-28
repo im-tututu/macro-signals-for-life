@@ -6,6 +6,7 @@ import os
 import time
 from typing import Any, Dict, List
 
+from src.core.models import JisiluEtfRowSnapshot, JisiluEtfSnapshot
 from src.core.config import settings
 from src.core.notify import build_notifier
 from src.core.utils import now_text, today_ymd
@@ -146,7 +147,7 @@ class JisiluEtfSource(BaseSource):
         min_unit_total_yi: float | int | str = 2,
         min_volume_wan: float | int | str = "",
         extra_query_string: str = "",
-    ) -> Dict[str, Any]:
+    ) -> JisiluEtfSnapshot:
         refreshed = False
         while True:
             try:
@@ -173,7 +174,7 @@ class JisiluEtfSource(BaseSource):
         min_unit_total_yi: float | int | str = 2,
         min_volume_wan: float | int | str = "",
         extra_query_string: str = "",
-    ) -> Dict[str, Any]:
+    ) -> JisiluEtfSnapshot:
         all_rows: List[Dict[str, Any]] = []
         records_total: Any = ""
         last_payload: Dict[str, Any] = {}
@@ -220,15 +221,26 @@ class JisiluEtfSource(BaseSource):
 
             if len(rows) < rows_per_page:
                 break
-        return {
-            "snapshot_date": snapshot_date or today_ymd(),
-            "fetched_at": now_text(),
-            "records": records_total,
-            "rows": all_rows,
-            "last_url": JISILU_ETF_LIST_URL,
-            "raw": last_payload,
-            "unique_rows": len(all_rows),
-        }
+
+        target_snapshot_date = self.require_text(snapshot_date or today_ymd(), field_name="snapshot_date")
+        fetched_at = now_text()
+        row_snapshots: List[JisiluEtfRowSnapshot] = []
+        for row in self.require_rows(all_rows):
+            cell = row.get("cell", row) if isinstance(row, dict) else {}
+            fund_id = self.require_text(str(cell.get("fund_id") or row.get("id") or ""), field_name="fund_id")
+            row_snapshots.append(JisiluEtfRowSnapshot(fund_id=fund_id, cell=dict(cell), raw_row=dict(row)))
+
+        return JisiluEtfSnapshot(
+            snapshot_date=target_snapshot_date,
+            fetched_at=fetched_at,
+            source_url=JISILU_ETF_LIST_URL,
+            records_total=records_total,
+            rows=row_snapshots,
+            meta={
+                "last_payload": last_payload,
+                "unique_rows": len(row_snapshots),
+            },
+        )
 
     def fetch_etf_index_all_result(
         self,
@@ -239,10 +251,10 @@ class JisiluEtfSource(BaseSource):
         min_unit_total_yi: float | int | str = 2,
         min_volume_wan: float | int | str = "",
         extra_query_string: str = "",
-    ) -> FetchResult[Dict[str, Any]]:
+    ) -> FetchResult[JisiluEtfSnapshot]:
         """统一返回 FetchResult，供 store/job 层复用。"""
 
-        payload = self.fetch_etf_index_all(
+        snapshot = self.fetch_etf_index_all(
             snapshot_date=snapshot_date,
             rows_per_page=rows_per_page,
             max_pages=max_pages,
@@ -251,12 +263,23 @@ class JisiluEtfSource(BaseSource):
             extra_query_string=extra_query_string,
         )
         return FetchResult(
-            payload=payload,
+            payload=snapshot,
             source_url=JISILU_ETF_LIST_URL,
-            meta={
-                "rows_per_page": rows_per_page,
-                "max_pages": max_pages,
-                "min_unit_total_yi": min_unit_total_yi,
-                "min_volume_wan": min_volume_wan,
-            },
+            meta=self.build_fetch_meta(
+                provider="JISILU",
+                biz_date=snapshot.snapshot_date,
+                fetched_at=snapshot.fetched_at,
+                params={
+                    "rows_per_page": rows_per_page,
+                    "max_pages": max_pages,
+                    "min_unit_total_yi": min_unit_total_yi,
+                    "min_volume_wan": min_volume_wan,
+                    "extra_query_string": extra_query_string,
+                },
+                page_info={
+                    "records_total": snapshot.records_total,
+                    "unique_rows": len(snapshot.rows),
+                },
+                raw_sample=snapshot.meta.get("last_payload"),
+            ),
         )

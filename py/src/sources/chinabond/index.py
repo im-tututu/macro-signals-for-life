@@ -5,7 +5,7 @@ from typing import Any, Dict, Iterable, Optional
 from urllib.parse import urlencode
 
 from src.core.models import BondIndexSnapshot
-from src.core.utils import to_float
+from src.core.utils import now_text, to_float
 
 from ..base import BaseSource, FetchResult
 
@@ -119,14 +119,29 @@ class ChinaBondIndexSource(BaseSource):
     ) -> FetchResult[BondIndexSnapshot]:
         """统一返回单指数抓取结果。"""
 
+        snapshot = self.fetch_duration_snapshot(index_id)
+        fetched_at = now_text()
         return FetchResult(
-            payload=self.fetch_duration_snapshot(index_id),
+            payload=snapshot,
             source_url=CHINABOND_INDEX_SINGLE_QUERY_URL,
-            meta={
-                "provider": "CHINABOND",
-                "index_name": index_name or index_id,
-                "index_code": index_code or index_id,
-            },
+            meta=self.build_fetch_meta(
+                provider="CHINABOND",
+                biz_date=snapshot.date,
+                fetched_at=fetched_at,
+                params={
+                    "index_id": index_id,
+                    "index_name": index_name or index_id,
+                    "index_code": index_code or index_id,
+                },
+                page_info={"raw_key_count": len(snapshot.meta.get("raw_keys", []))},
+                raw_sample={
+                    "raw_keys": snapshot.meta.get("raw_keys", []),
+                },
+                extra={
+                    "index_name": index_name or index_id,
+                    "index_code": index_code or index_id,
+                },
+            ),
         )
 
     def fetch_csindex_bond_feature(self, code: str) -> Dict[str, Any]:

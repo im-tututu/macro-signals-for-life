@@ -5,6 +5,8 @@ import re
 import time
 from typing import Any
 
+from src.core.models import SseLivelyBondRowSnapshot, SseLivelyBondSnapshot
+from src.core.utils import norm_ymd
 from src.core.utils import now_text, today_ymd
 
 from ..base import BaseSource, FetchResult
@@ -103,7 +105,7 @@ class SseLivelyBondSource(BaseSource):
                 continue
         return default
 
-    def fetch_lively_bond_all(self, *, page_size: int = 100, max_pages: int = 20) -> dict[str, Any]:
+    def fetch_lively_bond_all(self, *, page_size: int = 100, max_pages: int = 20) -> SseLivelyBondSnapshot:
         all_rows: list[dict[str, Any]] = []
         total_count = 0
         last_payload: dict[str, Any] = {}
@@ -119,25 +121,52 @@ class SseLivelyBondSource(BaseSource):
                 break
             if len(rows) < page_size:
                 break
-        return {
-            "snapshot_date": today_ymd(),
-            "fetched_at": now_text(),
-            "page_size": page_size,
-            "row_count": len(all_rows),
-            "total_count": total_count or len(all_rows),
-            "rows": all_rows,
-            "raw": last_payload,
-        }
 
-    def fetch_lively_bond_all_result(self, *, page_size: int = 100, max_pages: int = 20) -> FetchResult[dict[str, Any]]:
+        fetched_at = now_text()
+        row_snapshots: list[SseLivelyBondRowSnapshot] = []
+        for row in self.require_rows(all_rows):
+            trade_date = self.require_text(norm_ymd(row.get("TRADE_DATE")), field_name="trade_date")
+            bond_id = self.require_text(str(row.get("SEC_CODE") or ""), field_name="bond_id")
+            row_snapshots.append(
+                SseLivelyBondRowSnapshot(
+                    trade_date=trade_date,
+                    bond_id=bond_id,
+                    fields=dict(row),
+                )
+            )
+        snapshot_date = max(item.trade_date for item in row_snapshots)
+        return SseLivelyBondSnapshot(
+            snapshot_date=snapshot_date,
+            fetched_at=fetched_at,
+            source_url=SSE_COMMON_QUERY_URL,
+            rows=row_snapshots,
+            total_count=total_count or len(row_snapshots),
+            meta={
+                "raw": last_payload,
+                "page_size": page_size,
+                "row_count": len(row_snapshots),
+            },
+        )
+
+    def fetch_lively_bond_all_result(self, *, page_size: int = 100, max_pages: int = 20) -> FetchResult[SseLivelyBondSnapshot]:
         payload = self.fetch_lively_bond_all(page_size=page_size, max_pages=max_pages)
         return FetchResult(
             payload=payload,
             source_url=SSE_COMMON_QUERY_URL,
-            meta={
-                "provider": "SSE",
-                "category": "lively_bond",
-                "page_size": page_size,
-                "max_pages": max_pages,
-            },
+            meta=self.build_fetch_meta(
+                provider="SSE",
+                biz_date=payload.snapshot_date,
+                fetched_at=payload.fetched_at,
+                params={
+                    "category": "lively_bond",
+                    "page_size": page_size,
+                    "max_pages": max_pages,
+                },
+                page_info={
+                    "row_count": len(payload.rows),
+                    "total_count": payload.total_count,
+                },
+                raw_sample=payload.meta.get("raw"),
+                extra={"category": "lively_bond"},
+            ),
         )

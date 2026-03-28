@@ -377,39 +377,6 @@ def fetch_latest_sse_lively_bond_snapshot(
     )
 
 
-def fetch_latest_life_asset(
-    *,
-    dry_run: bool = False,
-    db_path: Path | None = None,
-):
-    """抓取民生与资产价格快照。"""
-
-    from src.sources.boc import BocSource
-    from src.sources.eastmoney import EastMoneySource
-    from src.sources.sge import SgeSource
-    from src.sources.stats_gov import StatsGovSource
-    from src.stores.life_asset import LifeAssetStore
-
-    store = LifeAssetStore(db_path=db_path)
-    stats_source = StatsGovSource()
-    sge_source = SgeSource()
-    boc_source = BocSource()
-    eastmoney_source = EastMoneySource()
-    row = store.build_row_from_fetch_results(
-        stats_source.fetch_placeholder_house_price_result(),
-        sge_source.fetch_gold_result(),
-        boc_source.fetch_deposit_1y_result(),
-        eastmoney_source.fetch_money_fund_7d_result(),
-    )
-    return run_upsert_job(
-        store=store,
-        rows=[row],
-        job_name="daily_raw_life_asset",
-        source_type="life_asset_placeholder",
-        dry_run=dry_run,
-    )
-
-
 def fetch_bond_index_duration(
     index_id: str,
     *,

@@ -5,7 +5,7 @@ from typing import Any
 
 from src.core.config import OVERSEAS_MACRO_ALPHA_SERIES, settings
 from src.core.models import Observation
-from src.core.utils import norm_ymd, to_float
+from src.core.utils import norm_ymd, now_text, to_float
 
 from .base import BaseSource, FetchResult
 
@@ -86,8 +86,19 @@ class AlphaVantageSource(BaseSource):
         return out
 
     def fetch_overseas_macro_result(self) -> FetchResult[dict[str, Observation | None]]:
+        payload = self.fetch_overseas_macro()
         return FetchResult(
-            payload=self.fetch_overseas_macro(),
+            payload=payload,
             source_url=ALPHA_VANTAGE_QUERY_URL,
-            meta={"provider": "ALPHA_VANTAGE"},
+            meta=self.build_fetch_meta(
+                provider="ALPHA_VANTAGE",
+                fetched_at=now_text(),
+                params={"series_count": len(OVERSEAS_MACRO_ALPHA_SERIES)},
+                page_info={"resolved_count": sum(1 for item in payload.values() if item is not None)},
+                raw_sample={
+                    key: value.meta.get("raw")
+                    for key, value in payload.items()
+                    if value is not None and value.meta.get("raw") is not None
+                },
+            ),
         )

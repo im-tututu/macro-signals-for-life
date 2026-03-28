@@ -2,33 +2,30 @@
 
 from .alpha_vantage import AlphaVantageSource
 from .base import BaseSource, FetchResult
-from .boc import BocSource
 from .chinabond import ChinaBondIndexSource, ChinaBondSource
 from .chinamoney import ChinaMoneySource
-from .eastmoney import EastMoneySource
 from .fred import FredSource
-from .jisilu import JisiluEtfSource, JisiluTreasurySource
+from .jisilu import JisiluEtfSource, JisiluQdiiSource, JisiluTreasurySource
 from .pbc import PbcSource
-from .sge import SgeSource
+from .registry import SOURCE_REGISTRY, SourceSpec, get_source_spec
 from .sina_futures import SinaFuturesSource
 from .sse import SseLivelyBondSource
-from .stats_gov import StatsGovSource
 
 __all__ = [
     "AlphaVantageSource",
     "BaseSource",
-    "BocSource",
     "ChinaBondIndexSource",
     "ChinaBondSource",
     "ChinaMoneySource",
-    "EastMoneySource",
     "FetchResult",
     "FredSource",
     "JisiluEtfSource",
+    "JisiluQdiiSource",
     "JisiluTreasurySource",
     "PbcSource",
-    "SgeSource",
+    "SOURCE_REGISTRY",
     "SinaFuturesSource",
+    "SourceSpec",
     "SseLivelyBondSource",
-    "StatsGovSource",
+    "get_source_spec",
 ]

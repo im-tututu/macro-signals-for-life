@@ -4,7 +4,7 @@ from typing import Dict
 
 from src.core.config import OVERSEAS_MACRO_FRED_SERIES, settings
 from src.core.models import Observation
-from src.core.utils import norm_ymd, to_float
+from src.core.utils import norm_ymd, now_text, to_float
 
 from .base import BaseSource, FetchResult
 
@@ -60,8 +60,15 @@ class FredSource(BaseSource):
     def fetch_overseas_macro_result(self) -> FetchResult[Dict[str, Observation]]:
         """统一返回 FetchResult，供 job/store 层复用。"""
 
+        payload = self.fetch_overseas_macro()
         return FetchResult(
-            payload=self.fetch_overseas_macro(),
+            payload=payload,
             source_url=FRED_OBSERVATIONS_URL,
-            meta={"provider": "FRED"},
+            meta=self.build_fetch_meta(
+                provider="FRED",
+                fetched_at=now_text(),
+                params={"series_count": len(OVERSEAS_MACRO_FRED_SERIES)},
+                page_info={"resolved_count": len(payload)},
+                raw_sample={key: value.date for key, value in payload.items()},
+            ),
         )

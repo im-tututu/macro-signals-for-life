@@ -12,7 +12,7 @@ except ImportError:  # pragma: no cover - optional dependency guard
 
 from src.core.config import CURVES, TERMS, settings
 from src.core.models import CurveBlock, CurveSnapshot, CurveSpec
-from src.core.utils import strip_tags
+from src.core.utils import now_text, strip_tags
 
 from ..base import BaseSource, FetchResult
 
@@ -228,10 +228,22 @@ class ChinaBondSource(BaseSource):
     def fetch_daily_wide_result(self, date: str, curves: Optional[List[CurveSpec]] = None) -> FetchResult[List[CurveSnapshot]]:
         """统一返回 FetchResult，便于 job 层复用通用编排逻辑。"""
 
+        payload = self.fetch_daily_wide(date, curves=curves)
+        self.require_rows(payload, field_name="curve_snapshots")
+        fetched_at = now_text()
         return FetchResult(
-            payload=self.fetch_daily_wide(date, curves=curves),
+            payload=payload,
             source_url=CHINABOND_YC_DETAIL_URL,
-            meta={"date": date},
+            meta=self.build_fetch_meta(
+                provider="CHINABOND",
+                biz_date=date,
+                fetched_at=fetched_at,
+                params={
+                    "date": date,
+                    "curve_count": len(curves) if curves is not None else None,
+                },
+                page_info={"row_count": len(payload)},
+            ),
         )
 
     @staticmethod
