@@ -70,7 +70,7 @@ class AlphaVantageSource(BaseSource):
         sample = rows[0] if rows else {}
         raise ValueError(f"Alpha Vantage no valid observation: {spec['fn']} | sample_keys={list(sample.keys())}")
 
-    def fetch_overseas_macro(self) -> dict[str, Observation | None]:
+    def fetch_alpha_vantage_snapshot(self) -> dict[str, Observation | None]:
         out: dict[str, Observation | None] = {}
         items = list(OVERSEAS_MACRO_ALPHA_SERIES.items())
         for idx, (field, spec) in enumerate(items):
@@ -85,8 +85,8 @@ class AlphaVantageSource(BaseSource):
                 time.sleep(1.2)
         return out
 
-    def fetch_overseas_macro_result(self) -> FetchResult[dict[str, Observation | None]]:
-        payload = self.fetch_overseas_macro()
+    def fetch_alpha_vantage_result(self) -> FetchResult[dict[str, Observation | None]]:
+        payload = self.fetch_alpha_vantage_snapshot()
         return FetchResult(
             payload=payload,
             source_url=ALPHA_VANTAGE_QUERY_URL,

@@ -115,21 +115,21 @@ SOURCE_REGISTRY: dict[str, SourceSpec] = {
         snapshot_type=SseLivelyBondSnapshot,
         fetch_method="fetch_lively_bond_all_result",
     ),
-    "fred_overseas_macro": SourceSpec(
-        source_id="fred_overseas_macro",
-        dataset_id="overseas_macro",
+    "fred": SourceSpec(
+        source_id="fred",
+        dataset_id="fred",
         source_class=FredSource,
         access_kind="api",
         snapshot_type=dict[str, Any],
-        fetch_method="fetch_overseas_macro_result",
+        fetch_method="fetch_fred_result",
     ),
-    "alpha_vantage_overseas_macro": SourceSpec(
-        source_id="alpha_vantage_overseas_macro",
-        dataset_id="overseas_macro",
+    "alpha_vantage": SourceSpec(
+        source_id="alpha_vantage",
+        dataset_id="alpha_vantage",
         source_class=AlphaVantageSource,
         access_kind="api",
         snapshot_type=dict[str, Any],
-        fetch_method="fetch_overseas_macro_from_alpha_vantage_result",
+        fetch_method="fetch_alpha_vantage_result",
     ),
 }
 

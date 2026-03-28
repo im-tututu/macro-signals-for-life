@@ -181,7 +181,7 @@ CREATE TABLE IF NOT EXISTS raw_futures (
     PRIMARY KEY (date)
 );
 
-CREATE TABLE IF NOT EXISTS raw_overseas_macro (
+CREATE TABLE IF NOT EXISTS raw_fred (
     date TEXT NOT NULL,
     fed_upper REAL,
     fed_lower REAL,
@@ -191,13 +191,23 @@ CREATE TABLE IF NOT EXISTS raw_overseas_macro (
     us_real_10y REAL,
     usd_broad REAL,
     usd_cny REAL,
+    vix REAL,
+    spx REAL,
+    nasdaq_100 REAL,
+    source TEXT,
+    fetched_at TEXT,
+    source_sheet TEXT,
+    source_row_num INTEGER,
+    migrated_at TEXT,
+    PRIMARY KEY (date)
+);
+
+CREATE TABLE IF NOT EXISTS raw_alpha_vantage (
+    date TEXT NOT NULL,
     gold REAL,
     wti REAL,
     brent REAL,
     copper REAL,
-    vix REAL,
-    spx REAL,
-    nasdaq_100 REAL,
     source TEXT,
     fetched_at TEXT,
     source_sheet TEXT,

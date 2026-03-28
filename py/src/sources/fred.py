@@ -51,16 +51,16 @@ class FredSource(BaseSource):
             return Observation(date=norm_ymd(obs.get("date")), value=value, source=f"FRED:{series_id}")
         raise ValueError(f"FRED no valid observation: {series_id}")
 
-    def fetch_overseas_macro(self) -> Dict[str, Observation]:
+    def fetch_fred_snapshot(self) -> Dict[str, Observation]:
         return {
             field: self.fetch_latest_observation(series_id)
             for field, series_id in OVERSEAS_MACRO_FRED_SERIES.items()
         }
 
-    def fetch_overseas_macro_result(self) -> FetchResult[Dict[str, Observation]]:
+    def fetch_fred_result(self) -> FetchResult[Dict[str, Observation]]:
         """统一返回 FetchResult，供 job/store 层复用。"""
 
-        payload = self.fetch_overseas_macro()
+        payload = self.fetch_fred_snapshot()
         return FetchResult(
             payload=payload,
             source_url=FRED_OBSERVATIONS_URL,

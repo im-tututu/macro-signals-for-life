@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS stg_sheet_raw_bond_curve (
     source_row_num INTEGER
 );
 
-CREATE TABLE IF NOT EXISTS stg_sheet_raw_overseas_macro (
+CREATE TABLE IF NOT EXISTS stg_sheet_raw_fred (
     date TEXT,
     fed_upper TEXT,
     fed_lower TEXT,
@@ -47,13 +47,20 @@ CREATE TABLE IF NOT EXISTS stg_sheet_raw_overseas_macro (
     us_real_10y TEXT,
     usd_broad TEXT,
     usd_cny TEXT,
+    vix TEXT,
+    spx TEXT,
+    nasdaq_100 TEXT,
+    source TEXT,
+    fetched_at TEXT,
+    source_row_num INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS stg_sheet_raw_alpha_vantage (
+    date TEXT,
     gold TEXT,
     wti TEXT,
     brent TEXT,
     copper TEXT,
-    vix TEXT,
-    spx TEXT,
-    nasdaq_100 TEXT,
     source TEXT,
     fetched_at TEXT,
     source_row_num INTEGER

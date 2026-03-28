@@ -54,7 +54,8 @@ ENV_BARK_DEVICE_KEY_KEYS: Final[tuple[str, ...]] = ("BARK_DEVICE_KEY", "MSFL_BAR
 # -----------------------------
 SHEET_RUN_LOG: Final[str] = "运行日志"
 SHEET_BOND_CURVE_RAW: Final[str] = "原始_收益率曲线"
-SHEET_OVERSEAS_MACRO_RAW: Final[str] = "原始_海外宏观"
+SHEET_FRED_RAW: Final[str] = "原始_FRED"
+SHEET_ALPHA_VANTAGE_RAW: Final[str] = "原始_AlphaVantage"
 SHEET_POLICY_RATE_RAW: Final[str] = "原始_政策利率"
 SHEET_MONEY_MARKET_RAW: Final[str] = "原始_资金面"
 SHEET_MONEY_MARKET_LEGACY: Final[str] = "原始_货币"
@@ -75,7 +76,8 @@ SHEET_SIGNAL_REVIEW: Final[str] = "信号-复盘"
 RAW_SHEET_NAMES: Final[list[str]] = [
     SHEET_RUN_LOG,
     SHEET_BOND_CURVE_RAW,
-    SHEET_OVERSEAS_MACRO_RAW,
+    SHEET_FRED_RAW,
+    SHEET_ALPHA_VANTAGE_RAW,
     SHEET_POLICY_RATE_RAW,
     SHEET_MONEY_MARKET_RAW,
     SHEET_MONEY_MARKET_LEGACY,
@@ -98,7 +100,8 @@ TABLE_RUN_LOG: Final[str] = "run_log"
 TABLE_CFG_BOND_INDEX_LIST: Final[str] = "cfg_bond_index_list"
 TABLE_MAP_JISILU_BOND_INDEX_CANDIDATE: Final[str] = "map_jisilu_bond_index_candidate"
 TABLE_RAW_BOND_CURVE: Final[str] = "raw_bond_curve"
-TABLE_RAW_OVERSEAS_MACRO: Final[str] = "raw_overseas_macro"
+TABLE_RAW_FRED: Final[str] = "raw_fred"
+TABLE_RAW_ALPHA_VANTAGE: Final[str] = "raw_alpha_vantage"
 TABLE_RAW_POLICY_RATE: Final[str] = "raw_policy_rate"
 TABLE_RAW_MONEY_MARKET: Final[str] = "raw_money_market"
 TABLE_RAW_FUTURES: Final[str] = "raw_futures"
@@ -117,7 +120,8 @@ RAW_TABLES: Final[list[str]] = [
     TABLE_CFG_BOND_INDEX_LIST,
     TABLE_MAP_JISILU_BOND_INDEX_CANDIDATE,
     TABLE_RAW_BOND_CURVE,
-    TABLE_RAW_OVERSEAS_MACRO,
+    TABLE_RAW_FRED,
+    TABLE_RAW_ALPHA_VANTAGE,
     TABLE_RAW_POLICY_RATE,
     TABLE_RAW_MONEY_MARKET,
     TABLE_RAW_FUTURES,

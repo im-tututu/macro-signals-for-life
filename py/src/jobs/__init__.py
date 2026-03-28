@@ -33,10 +33,16 @@ def fetch_latest_chinabond_curve(*args, **kwargs):
     return _fetch_latest_chinabond_curve(*args, **kwargs)
 
 
-def fetch_latest_overseas_macro(*args, **kwargs):
-    from .ingest import fetch_latest_overseas_macro as _fetch_latest_overseas_macro
+def fetch_latest_fred(*args, **kwargs):
+    from .ingest import fetch_latest_fred as _fetch_latest_fred
 
-    return _fetch_latest_overseas_macro(*args, **kwargs)
+    return _fetch_latest_fred(*args, **kwargs)
+
+
+def fetch_latest_alpha_vantage(*args, **kwargs):
+    from .ingest import fetch_latest_alpha_vantage as _fetch_latest_alpha_vantage
+
+    return _fetch_latest_alpha_vantage(*args, **kwargs)
 
 
 def fetch_recent_policy_rate_events(*args, **kwargs):
@@ -92,7 +98,8 @@ __all__ = [
     "fetch_bond_curve_for_date",
     "fetch_latest_bond_curve",
     "fetch_latest_chinabond_curve",
-    "fetch_latest_overseas_macro",
+    "fetch_latest_fred",
+    "fetch_latest_alpha_vantage",
     "fetch_recent_policy_rate_events",
     "fetch_latest_policy_rate",
     "fetch_latest_futures",

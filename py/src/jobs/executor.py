@@ -11,12 +11,13 @@ from .ingest import (
     fetch_bond_curve_for_date,
     fetch_bond_index_duration,
     fetch_latest_etf_snapshot,
+    fetch_latest_alpha_vantage,
     fetch_latest_futures,
+    fetch_latest_fred,
     fetch_latest_money_market,
     fetch_latest_qdii_snapshot,
     fetch_latest_sse_lively_bond_snapshot,
     fetch_latest_treasury_snapshot,
-    fetch_latest_overseas_macro,
     fetch_latest_policy_rate,
     fetch_recent_policy_rate_events,
 )
@@ -48,7 +49,8 @@ SIMPLE_LATEST_HANDLERS: dict[str, SimpleLatestHandler] = {
     "money_market": fetch_latest_money_market,
     "policy_rate": fetch_latest_policy_rate,
     "futures": fetch_latest_futures,
-    "overseas_macro": fetch_latest_overseas_macro,
+    "fred": fetch_latest_fred,
+    "alpha_vantage": fetch_latest_alpha_vantage,
 }
 
 

@@ -132,31 +132,51 @@ def fetch_latest_bond_curve(
     )
 
 
-def fetch_latest_overseas_macro(
+def fetch_latest_fred(
     *,
     dry_run: bool = False,
     db_path: Path | None = None,
 ):
-    """抓取 FRED + Alpha Vantage，并合并写入海外宏观原始表。"""
+    """抓取 FRED，并写入原始 FRED 表。"""
+
+    from src.sources.fred import FredSource
+    from src.stores.fred import FredStore
+
+    store = FredStore(db_path=db_path)
+    source = FredSource()
+    return run_fetch_transform_job(
+        store=store,
+        fetch=source.fetch_fred_result,
+        row_builder=store.build_row_from_fetch_result,
+        job_name="daily_raw_fred",
+        source_type="fred",
+        dry_run=dry_run,
+        incremental=True,
+        inclusive=True,
+    )
+
+
+def fetch_latest_alpha_vantage(
+    *,
+    dry_run: bool = False,
+    db_path: Path | None = None,
+):
+    """抓取 Alpha Vantage，并写入原始 Alpha Vantage 表。"""
 
     from src.sources.alpha_vantage import AlphaVantageSource
-    from src.sources.fred import FredSource
-    from src.stores.overseas import OverseasStore
+    from src.stores.alpha_vantage import AlphaVantageStore
 
-    store = OverseasStore(db_path=db_path)
-    fred_source = FredSource()
-    alpha_source = AlphaVantageSource()
-
-    fred_result = fred_source.fetch_overseas_macro_result()
-    alpha_result = alpha_source.fetch_overseas_macro_from_alpha_vantage_result()
-    row = store.build_row_from_fetch_results(fred_result, alpha_result)
-
-    return run_upsert_job(
+    store = AlphaVantageStore(db_path=db_path)
+    source = AlphaVantageSource()
+    return run_fetch_transform_job(
         store=store,
-        rows=[row],
-        job_name="daily_raw_overseas_macro",
-        source_type="fred_alpha_vantage",
+        fetch=source.fetch_alpha_vantage_result,
+        row_builder=store.build_row_from_fetch_result,
+        job_name="daily_raw_alpha_vantage",
+        source_type="alpha_vantage",
         dry_run=dry_run,
+        incremental=True,
+        inclusive=True,
     )
 
 
