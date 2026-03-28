@@ -6,8 +6,8 @@ from typing import Any
 
 from src.core.models import FuturesSnapshot
 from src.core.config import TABLE_RAW_FUTURES
-from src.sources.base import FetchResult
-from .base import BaseSqliteStore, TableSpec
+from src.sources._base import FetchResult
+from ._base import BaseSqliteStore, TableSpec
 
 
 FUTURES_SPEC = TableSpec(

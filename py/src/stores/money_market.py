@@ -7,8 +7,8 @@ from typing import Any
 from src.core.models import MoneyMarketSnapshot
 from src.core.utils import to_float
 from src.core.config import TABLE_RAW_MONEY_MARKET
-from src.sources.base import FetchResult
-from .base import BaseSqliteStore, TableSpec
+from src.sources._base import FetchResult
+from ._base import BaseSqliteStore, TableSpec
 
 
 MONEY_MARKET_RATE_FIELDS = (

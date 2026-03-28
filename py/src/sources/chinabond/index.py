@@ -7,7 +7,7 @@ from urllib.parse import urlencode
 from src.core.models import BondIndexSnapshot
 from src.core.utils import now_text, to_float
 
-from ..base import BaseSource, FetchResult
+from .._base import BaseSource, FetchResult
 
 CHINABOND_INDEX_SINGLE_QUERY_URL = "https://yield.chinabond.com.cn/cbweb-mn/indices/singleIndexQueryResult"
 CSI_BOND_FEATURE_URL = "https://www.csindex.com.cn/csindex-home/perf/get-bond-index-feature/{code}"

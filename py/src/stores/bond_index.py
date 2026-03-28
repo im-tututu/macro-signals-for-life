@@ -8,8 +8,8 @@ from typing import Any
 from src.core.models import BondIndexSnapshot
 from src.core.utils import now_text
 from src.core.config import TABLE_RAW_BOND_INDEX
-from src.sources.base import FetchResult
-from .base import BaseSqliteStore, TableSpec
+from src.sources._base import FetchResult
+from ._base import BaseSqliteStore, TableSpec
 
 
 BOND_INDEX_NUMERIC_FIELDS = ("dm", "y", "cons_number", "d", "v")

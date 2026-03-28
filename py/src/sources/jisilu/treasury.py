@@ -12,7 +12,7 @@ from src.core.models import JisiluTreasuryRowSnapshot, JisiluTreasurySnapshot
 from src.core.utils import now_text, today_ymd
 from src.core.config import settings
 
-from ..base import BaseSource, FetchResult
+from .._base import BaseSource, FetchResult
 
 JISILU_TREASURY_REFERER_URL = "https://www.jisilu.cn/data/bond/treasury/"
 JISILU_TREASURY_ALL_URL = (

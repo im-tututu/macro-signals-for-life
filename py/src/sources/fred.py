@@ -6,7 +6,7 @@ from src.core.config import OVERSEAS_MACRO_FRED_SERIES, settings
 from src.core.models import Observation
 from src.core.utils import norm_ymd, now_text, to_float
 
-from .base import BaseSource, FetchResult
+from ._base import BaseSource, FetchResult
 
 FRED_OBSERVATIONS_URL = "https://api.stlouisfed.org/fred/series/observations"
 

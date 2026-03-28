@@ -7,7 +7,7 @@ from typing import Any, Dict, Iterable, List
 from src.core.models import MoneyMarketSnapshot
 from src.core.utils import now_text, norm_ymd, to_float, today_ymd
 
-from .base import BaseSource, FetchResult
+from ._base import BaseSource, FetchResult
 
 CHINAMONEY_PRR_MD_URL = "https://www.chinamoney.com.cn/r/cms/www/chinamoney/data/currency/prr-md.json"
 CHINAMONEY_PRR_CHART_URL = "https://www.chinamoney.com.cn/r/cms/www/chinamoney/data/currency/prr-chrt.csv"

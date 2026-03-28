@@ -6,8 +6,8 @@ from typing import Any
 
 from src.core.models import CurveSnapshot
 from src.core.config import CURVE_VALUE_COLUMNS, CURVES, TABLE_RAW_BOND_CURVE
-from src.sources.base import FetchResult
-from .base import BaseSqliteStore, TableSpec
+from src.sources._base import FetchResult
+from ._base import BaseSqliteStore, TableSpec
 
 
 BOND_CURVE_SPEC = TableSpec(

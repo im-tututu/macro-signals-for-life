@@ -16,7 +16,7 @@ from src.core.models import (
 )
 
 from .alpha_vantage import AlphaVantageSource
-from .base import AccessKind, BaseSource
+from ._base import AccessKind, BaseSource
 from .chinabond import ChinaBondIndexSource, ChinaBondSource
 from .chinamoney import ChinaMoneySource
 from .fred import FredSource

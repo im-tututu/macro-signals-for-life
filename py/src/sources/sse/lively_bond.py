@@ -9,7 +9,7 @@ from src.core.models import SseLivelyBondRowSnapshot, SseLivelyBondSnapshot
 from src.core.utils import norm_ymd
 from src.core.utils import now_text, today_ymd
 
-from ..base import BaseSource, FetchResult
+from .._base import BaseSource, FetchResult
 
 SSE_LIVELY_BOND_REFERER_URL = "https://www.sse.com.cn/market/bonddata/livelybond/"
 SSE_COMMON_QUERY_URL = "https://query.sse.com.cn/commonQuery.do"

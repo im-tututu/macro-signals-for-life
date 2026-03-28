@@ -14,7 +14,7 @@ from src.core.config import CURVES, TERMS, settings
 from src.core.models import CurveBlock, CurveSnapshot, CurveSpec
 from src.core.utils import now_text, strip_tags
 
-from ..base import BaseSource, FetchResult
+from .._base import BaseSource, FetchResult
 
 CHINABOND_YC_DETAIL_URL = "https://yield.chinabond.com.cn/cbweb-mn/yc/ycDetail"
 CHINABOND_HEADERS = {

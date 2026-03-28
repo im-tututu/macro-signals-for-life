@@ -11,7 +11,7 @@ from src.core.config import settings
 from src.core.notify import build_notifier
 from src.core.utils import now_text, today_ymd
 
-from ..base import BaseSource, FetchResult
+from .._base import BaseSource, FetchResult
 
 JISILU_ETF_LIST_URL = "https://www.jisilu.cn/data/etf/etf_list/"
 

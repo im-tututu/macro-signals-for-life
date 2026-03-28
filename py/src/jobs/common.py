@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Callable, Iterable, Sequence, TypeVar
 
 from src.core.runtime import RunContext, WriteStats
-from src.sources.base import FetchResult
+from src.sources._base import FetchResult
 from src.stores import (
     BondCurveStore,
     BondIndexStore,
@@ -21,7 +21,7 @@ from src.stores import (
     SseLivelyBondStore,
     TreasuryStore,
 )
-from src.stores.base import BaseSqliteStore
+from src.stores._base import BaseSqliteStore
 
 T = TypeVar("T")
 

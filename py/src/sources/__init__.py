@@ -1,13 +1,13 @@
 """Source adapters."""
 
 from .alpha_vantage import AlphaVantageSource
-from .base import BaseSource, FetchResult
+from ._base import BaseSource, FetchResult
 from .chinabond import ChinaBondIndexSource, ChinaBondSource
 from .chinamoney import ChinaMoneySource
 from .fred import FredSource
 from .jisilu import JisiluEtfSource, JisiluQdiiSource, JisiluTreasurySource
 from .pbc import PbcSource
-from .registry import SOURCE_REGISTRY, SourceSpec, get_source_spec
+from ._registry import SOURCE_REGISTRY, SourceSpec, get_source_spec
 from .sina_futures import SinaFuturesSource
 from .sse import SseLivelyBondSource
 

@@ -13,7 +13,7 @@ except ImportError:  # pragma: no cover - optional dependency guard
 from src.core.models import PolicyRateEvent
 from src.core.utils import now_text, norm_ymd, to_float
 
-from .base import BaseSource, FetchResult
+from ._base import BaseSource, FetchResult
 
 PBC_OMO_LIST_URL = "https://www.pbc.gov.cn/zhengcehuobisi/125207/125213/125431/125475/index.html"
 PBC_MLF_LIST_URL = "https://www.pbc.gov.cn/zhengcehuobisi/125207/125213/125437/125446/125873/index.html"

@@ -7,7 +7,7 @@ from src.core.config import OVERSEAS_MACRO_ALPHA_SERIES, settings
 from src.core.models import Observation
 from src.core.utils import norm_ymd, now_text, to_float
 
-from .base import BaseSource, FetchResult
+from ._base import BaseSource, FetchResult
 
 ALPHA_VANTAGE_QUERY_URL = "https://www.alphavantage.co/query"
 

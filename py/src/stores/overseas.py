@@ -7,8 +7,8 @@ from typing import Any
 from src.core.models import Observation
 from src.core.utils import now_text, today_ymd
 from src.core.config import TABLE_RAW_OVERSEAS_MACRO
-from src.sources.base import FetchResult
-from .base import BaseSqliteStore, TableSpec
+from src.sources._base import FetchResult
+from ._base import BaseSqliteStore, TableSpec
 
 
 OVERSEAS_NUMERIC_FIELDS = (

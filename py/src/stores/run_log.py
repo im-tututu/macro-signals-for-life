@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from src.core.config import TABLE_RUN_LOG
-from .base import BaseSqliteStore, TableSpec
+from ._base import BaseSqliteStore, TableSpec
 
 
 RUN_LOG_SPEC = TableSpec(

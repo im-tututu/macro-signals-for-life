@@ -8,8 +8,8 @@ from typing import Any
 from src.core.config import TABLE_RAW_SSE_LIVELY_BOND
 from src.core.models import SseLivelyBondRowSnapshot, SseLivelyBondSnapshot
 from src.core.utils import norm_ymd, to_float
-from src.sources.base import FetchResult
-from .base import BaseSqliteStore, TableSpec
+from src.sources._base import FetchResult
+from ._base import BaseSqliteStore, TableSpec
 
 
 SSE_LIVELY_BOND_NUMERIC_FIELDS = (

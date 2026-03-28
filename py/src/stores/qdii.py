@@ -8,8 +8,8 @@ from typing import Any
 from src.core.config import TABLE_RAW_JISILU_QDII
 from src.core.models import JisiluQdiiRowSnapshot, JisiluQdiiSnapshot
 from src.core.utils import strip_tags, to_float
-from src.sources.base import FetchResult
-from .base import BaseSqliteStore, TableSpec
+from src.sources._base import FetchResult
+from ._base import BaseSqliteStore, TableSpec
 
 
 QDII_NUMERIC_FIELDS = (

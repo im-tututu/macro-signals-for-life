@@ -6,7 +6,7 @@ from collections.abc import Iterable
 from src.core.models import FuturesSnapshot
 from src.core.utils import now_text, to_float, today_ymd
 
-from .base import BaseSource, FetchResult
+from ._base import BaseSource, FetchResult
 
 SINA_FUTURES_QUOTE_URL = "https://hq.sinajs.cn/list="
 
