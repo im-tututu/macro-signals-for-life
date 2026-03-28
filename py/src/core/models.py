@@ -76,6 +76,8 @@ class BondIndexSnapshot:
     cons_number: Optional[float]
     modified_duration: Optional[float]
     convexity: Optional[float]
+    total_market_value: Optional[float]
+    avg_compensation_period: Optional[float]
     source: str
     meta: Dict[str, Any] = field(default_factory=dict)
 

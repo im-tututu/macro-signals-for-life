@@ -31,11 +31,10 @@ class CsindexBondSource(BaseSource):
             cons_number=to_float(payload.get("consNumber") or payload.get("cons_number")),
             modified_duration=to_float(payload.get("d")),
             convexity=to_float(payload.get("v")),
+            total_market_value=None,
+            avg_compensation_period=None,
             source=CSI_BOND_FEATURE_URL,
-            meta={
-                "source_date": source_date,
-                "payload": payload if isinstance(payload, dict) else {"raw": payload},
-            },
+            meta={"payload": payload if isinstance(payload, dict) else {"raw": payload}},
         )
 
     def fetch_feature_snapshot_result(

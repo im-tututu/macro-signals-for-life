@@ -266,6 +266,8 @@ SHEET_SPECS: list[SheetSpec] = [
             "cons_number": "cons_number",
             "d": "d",
             "v": "v",
+            "total_market_value": "total_market_value",
+            "avg_compensation_period": "avg_compensation_period",
             "fetch_status": "fetch_status",
             "raw_json": "raw_json",
             "fetched_at": "fetched_at",
@@ -822,25 +824,22 @@ def merge_staged_data(conn: sqlite3.Connection) -> dict[str, int]:
 
     bond_index_insert_sql = f"""
         INSERT OR REPLACE INTO {{target_table}} (
-            trade_date, index_name, index_code, provider, type_lv1, type_lv2, type_lv3,
-            source_url, data_date, dm, y, cons_number, d, v, fetch_status, raw_json, fetched_at, error,
+            trade_date, index_name, index_code, source_url, dm, y, cons_number, d, v,
+            total_market_value, avg_compensation_period, fetch_status, raw_json, fetched_at, error,
             source_sheet, source_row_num, migrated_at
         )
         SELECT
             {nonblank('trade_date')},
             {nonblank('index_name')},
             {nonblank('index_code')},
-            {nonblank('provider')},
-            {nonblank('type_lv1')},
-            {nonblank('type_lv2')},
-            {nonblank('type_lv3')},
             {nonblank('source_url')},
-            {nonblank('data_date')},
             {cast_real('dm')},
             {cast_real('y')},
             {cast_int('cons_number')},
             {cast_real('d')},
             {cast_real('v')},
+            {cast_real('total_market_value')},
+            {cast_real('avg_compensation_period')},
             {nonblank('fetch_status')},
             {nonblank('raw_json')},
             {nonblank('fetched_at')},

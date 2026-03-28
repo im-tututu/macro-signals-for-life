@@ -16,7 +16,7 @@ from src.sources._base import FetchResult
 from ._base import BaseSqliteStore, TableSpec
 
 
-BOND_INDEX_NUMERIC_FIELDS = ("dm", "y", "cons_number", "d", "v")
+BOND_INDEX_NUMERIC_FIELDS = ("dm", "y", "cons_number", "d", "v", "total_market_value", "avg_compensation_period")
 
 
 def _build_spec(table_name: str) -> TableSpec:
@@ -29,12 +29,7 @@ def _build_spec(table_name: str) -> TableSpec:
         text_fields=(
             "index_name",
             "index_code",
-            "provider",
-            "type_lv1",
-            "type_lv2",
-            "type_lv3",
             "source_url",
-            "data_date",
             "fetch_status",
             "raw_json",
             "error",
@@ -45,12 +40,7 @@ def _build_spec(table_name: str) -> TableSpec:
             "trade_date",
             "index_name",
             "index_code",
-            "provider",
-            "type_lv1",
-            "type_lv2",
-            "type_lv3",
             "source_url",
-            "data_date",
             *BOND_INDEX_NUMERIC_FIELDS,
             "fetch_status",
             "raw_json",
@@ -87,17 +77,14 @@ class BaseBondIndexStore(BaseSqliteStore):
             "trade_date": snapshot.date,
             "index_name": index_name,
             "index_code": index_code,
-            "provider": cls.provider_name,
-            "type_lv1": "",
-            "type_lv2": "",
-            "type_lv3": "",
             "source_url": fetch_result.source_url,
-            "data_date": snapshot.date,
             "dm": snapshot.duration,
             "y": snapshot.ytm,
             "cons_number": snapshot.cons_number,
             "d": snapshot.modified_duration,
             "v": snapshot.convexity,
+            "total_market_value": snapshot.total_market_value,
+            "avg_compensation_period": snapshot.avg_compensation_period,
             "fetch_status": "OK",
             "raw_json": json.dumps(snapshot.meta, ensure_ascii=False, sort_keys=True, default=str),
             "fetched_at": now_text(),

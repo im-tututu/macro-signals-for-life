@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from typing import Any, Dict
 
 from src.core.models import BondIndexSnapshot
@@ -9,38 +8,63 @@ from src.core.utils import now_text, norm_ymd, to_float, today_ymd
 from ._base import BaseSource
 from ._base import FetchResult
 
-CNI_BOND_FEATURE_URL = "https://www.cnindex.com.cn/module/index-detail.html?act_menu=1&indexCode={code}"
+CNI_BOND_INCOME_URL = "https://www.cnindex.com.cn/index-income?indexcode={code}"
+CNI_BOND_ANALYSIS_URL = "https://www.cnindex.com.cn/indexAnalysis/getIndexAnalysis?indexCode={code}"
 
 
 class CnindexBondSource(BaseSource):
-    """国证公司债券指数特征来源。"""
+    """国证公司债券指数特征来源。
 
-    def fetch_bond_feature(self, code: str) -> Dict[str, Any]:
-        url = CNI_BOND_FEATURE_URL.format(code=code)
-        text = self.http.get_text(url, headers={"Accept": "application/json, text/plain, */*"})
-        try:
-            parsed = json.loads(text)
-        except Exception:  # noqa: BLE001
-            return {"raw": text}
-        return parsed.get("data", parsed)
+    国证债券指数的“日期/收益表现”和“分析指标”分散在两个 JSON 接口：
+    - `index-income`: 近期收益表现、波动率、calDate/deadline
+    - `getIndexAnalysis`: 到期收益率、修正久期、凸性、平均剩余期限、市值
+
+    因此这里改成组合抓取，再统一映射成一条 `BondIndexSnapshot`。
+    """
+
+    def fetch_income_payload(self, code: str) -> Dict[str, Any]:
+        url = CNI_BOND_INCOME_URL.format(code=code)
+        data = self.http.get_json(url, headers={"Accept": "application/json, text/plain, */*"})
+        return data.get("data", data)
+
+    def fetch_analysis_payload(self, code: str) -> Dict[str, Any]:
+        url = CNI_BOND_ANALYSIS_URL.format(code=code)
+        data = self.http.get_json(url, headers={"Accept": "application/json, text/plain, */*"})
+        return data.get("data", data)
 
     def fetch_feature_snapshot(self, code: str) -> BondIndexSnapshot:
-        payload = self.fetch_bond_feature(code)
-        source_date = norm_ymd(payload.get("date") or payload.get("tradeDate") or payload.get("trade_date"))
+        income_payload = self.fetch_income_payload(code)
+        analysis_payload = self.fetch_analysis_payload(code)
+
+        source_date = norm_ymd(
+            income_payload.get("calDate")
+            or income_payload.get("deadline")
+            or analysis_payload.get("genDate")
+            or analysis_payload.get("date")
+            or analysis_payload.get("tradeDate")
+            or analysis_payload.get("trade_date")
+        )
         date = source_date or today_ymd()
-        normalized_payload = payload if isinstance(payload, dict) else {"raw": payload}
+
         return BondIndexSnapshot(
             date=date,
             index_id=code,
-            duration=to_float(normalized_payload.get("dm")),
-            ytm=to_float(normalized_payload.get("y")),
-            cons_number=to_float(normalized_payload.get("consNumber") or normalized_payload.get("cons_number")),
-            modified_duration=to_float(normalized_payload.get("d")),
-            convexity=to_float(normalized_payload.get("v")),
-            source=CNI_BOND_FEATURE_URL,
+            duration=to_float(analysis_payload.get("avgResidualMaturity")),
+            ytm=to_float(analysis_payload.get("yieldMaturity")),
+            cons_number=to_float(
+                analysis_payload.get("consNumber")
+                or analysis_payload.get("cons_number")
+                or income_payload.get("consNumber")
+                or income_payload.get("cons_number")
+            ),
+            modified_duration=to_float(analysis_payload.get("modifiedDuration")),
+            convexity=to_float(analysis_payload.get("convexity")),
+            total_market_value=to_float(analysis_payload.get("totalMarketValue")),
+            avg_compensation_period=None,
+            source=CNI_BOND_ANALYSIS_URL,
             meta={
-                "source_date": source_date,
-                "payload": normalized_payload,
+                "income_payload": income_payload,
+                "analysis_payload": analysis_payload,
             },
         )
 
@@ -55,7 +79,7 @@ class CnindexBondSource(BaseSource):
         fetched_at = now_text()
         return FetchResult(
             payload=snapshot,
-            source_url=CNI_BOND_FEATURE_URL.format(code=code),
+            source_url=CNI_BOND_ANALYSIS_URL.format(code=code),
             meta=self.build_fetch_meta(
                 provider="CNINDEX",
                 biz_date=snapshot.date,

@@ -33,8 +33,8 @@ class ChinaBondIndexSource(BaseSource):
         *,
         qxlxt: str = "00",
         ltcslx: str = "00",
-        zslxt: Iterable[str] = ("PJSZFJQ", "PJSZFDQSYL", "PJSZFTX"),
-        zslxt1: Iterable[str] = ("PJSZFJQ", "PJSZFDQSYL", "PJSZFTX"),
+        zslxt: Iterable[str] = ("PJSZFJQ", "PJSZFDQSYL", "PJSZFTX", "ZSZSZ", "PJDCQ"),
+        zslxt1: Iterable[str] = ("PJSZFJQ", "PJSZFDQSYL", "PJSZFTX", "ZSZSZ", "PJDCQ"),
         lx: str = "1",
         locale: str = "zh_CN",
     ) -> Dict[str, Any]:
@@ -96,6 +96,8 @@ class ChinaBondIndexSource(BaseSource):
         duration = self.latest_point(payload.get("PJSZFJQ_00"))
         ytm = self.latest_point(payload.get("PJSZFDQSYL_00"))
         convexity = self.latest_point(payload.get("PJSZFTX_00"))
+        total_market_value = self.latest_point(payload.get("ZSZSZ_00"))
+        avg_compensation_period = self.latest_point(payload.get("PJDCQ_00"))
         if not duration:
             raise ValueError(f"No duration data for index_id={index_id}")
         return BondIndexSnapshot(
@@ -106,8 +108,10 @@ class ChinaBondIndexSource(BaseSource):
             cons_number=None,
             modified_duration=None,
             convexity=convexity["value"] if convexity else None,
+            total_market_value=total_market_value["value"] if total_market_value else None,
+            avg_compensation_period=avg_compensation_period["value"] if avg_compensation_period else None,
             source=CHINABOND_INDEX_SINGLE_QUERY_URL,
-            meta={"raw_keys": list(payload.keys())},
+            meta={"payload": payload},
         )
 
     def fetch_duration_snapshot_result(
@@ -133,10 +137,7 @@ class ChinaBondIndexSource(BaseSource):
                     "index_name": index_name or index_id,
                     "index_code": index_code or index_id,
                 },
-                page_info={"raw_key_count": len(snapshot.meta.get("raw_keys", []))},
-                raw_sample={
-                    "raw_keys": snapshot.meta.get("raw_keys", []),
-                },
+                raw_sample=snapshot.meta,
                 extra={
                     "index_name": index_name or index_id,
                     "index_code": index_code or index_id,

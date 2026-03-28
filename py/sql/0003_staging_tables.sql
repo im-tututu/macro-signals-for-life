@@ -197,6 +197,8 @@ CREATE TABLE IF NOT EXISTS stg_sheet_raw_bond_index (
     cons_number TEXT,
     d TEXT,
     v TEXT,
+    total_market_value TEXT,
+    avg_compensation_period TEXT,
     fetch_status TEXT,
     raw_json TEXT,
     fetched_at TEXT,
