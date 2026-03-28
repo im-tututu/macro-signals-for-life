@@ -3,8 +3,24 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Sequence
 
-import gspread
-from google.oauth2.service_account import Credentials
+_INSTALL_HINT = (
+    "缺少 Google Sheets 导出依赖。请先在当前 Python 环境安装 "
+    "`py/requirements.txt`，例如运行：`python3 -m pip install -r py/requirements.txt`。"
+)
+
+try:
+    import gspread
+except ModuleNotFoundError as exc:
+    if exc.name != "gspread":
+        raise
+    raise ModuleNotFoundError(_INSTALL_HINT) from exc
+
+try:
+    from google.oauth2.service_account import Credentials
+except ModuleNotFoundError as exc:
+    if exc.name not in {"google", "google.oauth2", "google.oauth2.service_account"}:
+        raise
+    raise ModuleNotFoundError(_INSTALL_HINT) from exc
 
 try:
     from src.core.config import AppConfig, getenv_first, load_local_env  # type: ignore
