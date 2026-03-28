@@ -4,12 +4,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Sequence
 
+from src.core.db import connect
 from src.core.runtime import WriteStats
 from src.core.trading_calendar import DEFAULT_TRADING_DAYS_CSV, sync_trading_days_csv
 
 from .ingest import (
     fetch_bond_curve_for_date,
-    fetch_bond_index_duration,
+    fetch_chinabond_bond_index,
+    fetch_cnindex_bond_index,
+    fetch_csindex_bond_index,
     fetch_latest_etf_snapshot,
     fetch_latest_alpha_vantage,
     fetch_latest_futures,
@@ -94,21 +97,67 @@ def _run_bond_curve_job(ctx: ExecutionContext) -> list[dict[str, object]]:
     return [_result(ctx.spec.job_name, status="success", table=ctx.spec.target_table, stats=_stats_payload(stats))]
 
 
-def _run_bond_index_batch_job(ctx: ExecutionContext) -> list[dict[str, object]]:
-    all_index_ids = list(ctx.bond_index_ids or ())
+def _load_default_bond_index_items(db_path: Path | None, provider: str) -> list[dict[str, str]]:
+    """从配置表按 provider 加载默认可抓的债券指数名单。"""
+
+    conn = connect(db_path)
+    try:
+        rows = conn.execute(
+            """
+            SELECT index_name, index_code
+            FROM cfg_bond_index_list
+            WHERE provider = ?
+              AND COALESCE(index_code, '') <> ''
+            ORDER BY index_name
+            """,
+            (provider,),
+        ).fetchall()
+        return [
+            {
+                "index_id": str(row["index_code"]),
+                "index_name": str(row["index_name"]),
+                "index_code": str(row["index_code"]),
+            }
+            for row in rows
+        ]
+    finally:
+        conn.close()
+
+
+def _run_bond_index_batch_job(
+    ctx: ExecutionContext,
+    *,
+    provider: str,
+    fetcher: Callable[..., WriteStats],
+) -> list[dict[str, object]]:
+    items: list[dict[str, str | None]] = []
+    explicit_ids = list(ctx.bond_index_ids or ())
     if ctx.index_id:
-        all_index_ids.append(ctx.index_id)
-    if not all_index_ids:
-        return [_result(ctx.spec.job_name, status="skipped", table=ctx.spec.target_table, reason="missing --index-id")]
+        explicit_ids.append(ctx.index_id)
+
+    if explicit_ids:
+        for item in explicit_ids:
+            items.append(
+                {
+                    "index_id": item,
+                    "index_name": ctx.index_name,
+                    "index_code": ctx.index_code,
+                }
+            )
+    else:
+        defaults = _load_default_bond_index_items(ctx.db_path, provider)
+        if not defaults:
+            return [_result(ctx.spec.job_name, status="skipped", table=ctx.spec.target_table, reason="missing index ids")]
+        items.extend(defaults)
 
     out: list[dict[str, object]] = []
-    for item in all_index_ids:
-        stats = fetch_bond_index_duration(
-            item,
+    for item in items:
+        stats = fetcher(
+            str(item["index_id"]),
             dry_run=ctx.dry_run,
             db_path=ctx.db_path,
-            index_name=ctx.index_name,
-            index_code=ctx.index_code,
+            index_name=str(item["index_name"]) if item["index_name"] else None,
+            index_code=str(item["index_code"]) if item["index_code"] else None,
         )
         out.append(
             _result(
@@ -116,10 +165,23 @@ def _run_bond_index_batch_job(ctx: ExecutionContext) -> list[dict[str, object]]:
                 status="success",
                 table=ctx.spec.target_table,
                 stats=_stats_payload(stats),
-                index_id=item,
+                index_id=item["index_id"],
+                index_name=item["index_name"],
             )
         )
     return out
+
+
+def _run_chinabond_bond_index_batch_job(ctx: ExecutionContext) -> list[dict[str, object]]:
+    return _run_bond_index_batch_job(ctx, provider="中债", fetcher=fetch_chinabond_bond_index)
+
+
+def _run_csindex_bond_index_batch_job(ctx: ExecutionContext) -> list[dict[str, object]]:
+    return _run_bond_index_batch_job(ctx, provider="中证", fetcher=fetch_csindex_bond_index)
+
+
+def _run_cnindex_bond_index_batch_job(ctx: ExecutionContext) -> list[dict[str, object]]:
+    return _run_bond_index_batch_job(ctx, provider="国证", fetcher=fetch_cnindex_bond_index)
 
 
 def _run_policy_rate_recent_job(ctx: ExecutionContext) -> list[dict[str, object]]:
@@ -196,7 +258,9 @@ def _run_trading_days_update_job(ctx: ExecutionContext) -> list[dict[str, object
 EXECUTION_HANDLERS: dict[str, ExecutorHandler] = {
     "simple_latest": _run_simple_latest_job,
     "bond_curve": _run_bond_curve_job,
-    "bond_index_batch": _run_bond_index_batch_job,
+    "chinabond_bond_index_batch": _run_chinabond_bond_index_batch_job,
+    "csindex_bond_index_batch": _run_csindex_bond_index_batch_job,
+    "cnindex_bond_index_batch": _run_cnindex_bond_index_batch_job,
     "policy_rate_recent": _run_policy_rate_recent_job,
     "etf_snapshot": _run_etf_snapshot_job,
     "qdii_snapshot": _run_qdii_snapshot_job,

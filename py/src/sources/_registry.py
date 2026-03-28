@@ -19,6 +19,8 @@ from .alpha_vantage import AlphaVantageSource
 from ._base import AccessKind, BaseSource
 from .chinabond import ChinaBondIndexSource, ChinaBondSource
 from .chinamoney import ChinaMoneySource
+from .cnindex import CnindexBondSource
+from .csindex import CsindexBondSource
 from .fred import FredSource
 from .jisilu import JisiluEtfSource, JisiluQdiiSource, JisiluTreasurySource
 from .pbc import PbcSource
@@ -60,11 +62,29 @@ SOURCE_REGISTRY: dict[str, SourceSpec] = {
     ),
     "chinabond_index": SourceSpec(
         source_id="chinabond_index",
-        dataset_id="bond_index",
+        dataset_id="chinabond_bond_index",
         source_class=ChinaBondIndexSource,
         access_kind="xhr_json",
         snapshot_type=BondIndexSnapshot,
         fetch_method="fetch_duration_snapshot_result",
+    ),
+    "csindex_bond": SourceSpec(
+        source_id="csindex_bond",
+        dataset_id="csindex_bond_index",
+        source_class=CsindexBondSource,
+        access_kind="api",
+        snapshot_type=BondIndexSnapshot,
+        fetch_method="fetch_feature_snapshot_result",
+        notes=("中证公司债券指数特征查询。",),
+    ),
+    "cnindex_bond": SourceSpec(
+        source_id="cnindex_bond",
+        dataset_id="cnindex_bond_index",
+        source_class=CnindexBondSource,
+        access_kind="page_html",
+        snapshot_type=BondIndexSnapshot,
+        fetch_method="fetch_feature_snapshot_result",
+        notes=("国证公司债券指数特征查询。",),
     ),
     "pbc_policy_rate": SourceSpec(
         source_id="pbc_policy_rate",

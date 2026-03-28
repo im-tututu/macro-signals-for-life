@@ -26,7 +26,9 @@ JOB_GROUPS: dict[str, tuple[str, ...]] = {
         "futures",
         "etf",
         "life_asset",
-        "bond_index",
+        "chinabond_index",
+        "csindex_bond_index",
+        "cnindex_bond_index",
     ),
     "us_morning": (
         "overseas_macro",
@@ -78,7 +80,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--bond-index-id",
         action="append",
         default=[],
-        help="cn_night 组里可重复传入的 bond_index index_id；未提供则跳过 bond_index。",
+        help="cn_night 组里可重复传入的债券指数 index_id；未提供则按各 provider 默认名单抓取。",
     )
     return parser
 

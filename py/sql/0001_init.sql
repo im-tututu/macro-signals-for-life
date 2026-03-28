@@ -103,7 +103,57 @@ CREATE TABLE IF NOT EXISTS raw_bond_curve (
     PRIMARY KEY (date, curve)
 );
 
-CREATE TABLE IF NOT EXISTS raw_bond_index (
+CREATE TABLE IF NOT EXISTS raw_chinabond_bond_index (
+    trade_date TEXT NOT NULL,
+    index_name TEXT NOT NULL,
+    index_code TEXT,
+    provider TEXT,
+    type_lv1 TEXT,
+    type_lv2 TEXT,
+    type_lv3 TEXT,
+    source_url TEXT,
+    data_date TEXT,
+    dm REAL,
+    y REAL,
+    cons_number INTEGER,
+    d REAL,
+    v REAL,
+    fetch_status TEXT,
+    raw_json TEXT,
+    fetched_at TEXT,
+    error TEXT,
+    source_sheet TEXT,
+    source_row_num INTEGER,
+    migrated_at TEXT,
+    PRIMARY KEY (trade_date, index_name)
+);
+
+CREATE TABLE IF NOT EXISTS raw_csindex_bond_index (
+    trade_date TEXT NOT NULL,
+    index_name TEXT NOT NULL,
+    index_code TEXT,
+    provider TEXT,
+    type_lv1 TEXT,
+    type_lv2 TEXT,
+    type_lv3 TEXT,
+    source_url TEXT,
+    data_date TEXT,
+    dm REAL,
+    y REAL,
+    cons_number INTEGER,
+    d REAL,
+    v REAL,
+    fetch_status TEXT,
+    raw_json TEXT,
+    fetched_at TEXT,
+    error TEXT,
+    source_sheet TEXT,
+    source_row_num INTEGER,
+    migrated_at TEXT,
+    PRIMARY KEY (trade_date, index_name)
+);
+
+CREATE TABLE IF NOT EXISTS raw_cnindex_bond_index (
     trade_date TEXT NOT NULL,
     index_name TEXT NOT NULL,
     index_code TEXT,

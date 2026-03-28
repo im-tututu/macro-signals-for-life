@@ -49,9 +49,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--dry-run", action="store_true", help="仅演练，不提交数据库事务。")
     parser.add_argument("--date", default=None, help="bond_curve 使用的抓取日期，格式 YYYY-MM-DD。")
     parser.add_argument("--limit", type=int, default=20, help="policy_rate_recent 每类事件抓取上限。")
-    parser.add_argument("--index-id", default=None, help="bond_index 使用的 index id。")
-    parser.add_argument("--index-name", default=None, help="bond_index 可选 index name。")
-    parser.add_argument("--index-code", default=None, help="bond_index 可选 index code。")
+    parser.add_argument("--index-id", default=None, help="债券指数 job 使用的 index id / code。")
+    parser.add_argument("--index-name", default=None, help="债券指数 job 可选 index name。")
+    parser.add_argument("--index-code", default=None, help="债券指数 job 可选 index code。")
     parser.add_argument("--snapshot-date", default=None, help="etf 可选快照日期，格式 YYYY-MM-DD。")
     parser.add_argument("--rows-per-page", type=int, default=500, help="etf 每页抓取条数。")
     parser.add_argument("--max-pages", type=int, default=20, help="etf 最大抓取页数。")
@@ -88,9 +88,7 @@ def main() -> None:
         parser.error(f"job {args.job} 返回空结果")
         return
 
-    if args.job == "bond_index":
-        if args.index_id is None:
-            parser.error("bond_index 需要传 --index-id")
+    if args.job in {"chinabond_index", "csindex_bond_index", "cnindex_bond_index"}:
         payload = _build_output_payload(results[0], args)
         print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
         return

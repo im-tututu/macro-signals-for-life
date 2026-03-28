@@ -15,7 +15,12 @@ if str(PY_ROOT) not in sys.path:
 
 from src.core.runtime import WriteStats
 from src.jobs.backfill import backfill_chinabond_curve_window
-from src.jobs.ingest import fetch_bond_index_duration, fetch_recent_policy_rate_events
+from src.jobs.ingest import (
+    fetch_chinabond_bond_index,
+    fetch_cnindex_bond_index,
+    fetch_csindex_bond_index,
+    fetch_recent_policy_rate_events,
+)
 from src.jobs.manual import review_table
 
 
@@ -23,7 +28,7 @@ def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="运行 Python 侧原始表 backfill。")
     parser.add_argument(
         "target",
-        choices=["bond_curve", "policy_rate", "bond_index"],
+        choices=["bond_curve", "policy_rate", "chinabond_index", "csindex_bond_index", "cnindex_bond_index"],
         help="要执行的 backfill 目标。",
     )
     parser.add_argument("--db", dest="db_path", type=Path, default=None, help="可选 SQLite 路径覆盖。")
@@ -40,10 +45,9 @@ def _parse_args() -> argparse.Namespace:
     # policy_rate
     parser.add_argument("--limit", type=int, default=60, help="policy_rate 近期事件回填上限。")
 
-    # bond_index
-    parser.add_argument("--index-id", action="append", default=[], help="bond_index 的中债 index id，可重复传入。")
-    parser.add_argument("--index-name", action="append", default=[], help="bond_index 可选 index name，顺序需与 --index-id 对齐。")
-    parser.add_argument("--index-code", action="append", default=[], help="bond_index 可选 index code，顺序需与 --index-id 对齐。")
+    parser.add_argument("--index-id", action="append", default=[], help="债券指数 backfill 的 index id / code，可重复传入。")
+    parser.add_argument("--index-name", action="append", default=[], help="债券指数 backfill 可选 index name，顺序需与 --index-id 对齐。")
+    parser.add_argument("--index-code", action="append", default=[], help="债券指数 backfill 可选 index code，顺序需与 --index-id 对齐。")
 
     return parser.parse_args()
 
@@ -100,9 +104,9 @@ def _align_optional(values: list[str], total: int) -> list[str | None]:
     return [value or None for value in values]
 
 
-def _run_bond_index_backfill(args: argparse.Namespace) -> dict[str, object]:
+def _run_bond_index_backfill(args: argparse.Namespace, *, target: str) -> dict[str, object]:
     if not args.index_id:
-        raise ValueError("bond_index backfill 至少需要一个 --index-id。")
+        raise ValueError(f"{target} backfill 至少需要一个 --index-id。")
 
     names = _align_optional(args.index_name, len(args.index_id))
     codes = _align_optional(args.index_code, len(args.index_id))
@@ -110,11 +114,16 @@ def _run_bond_index_backfill(args: argparse.Namespace) -> dict[str, object]:
     stats_list: list[WriteStats] = []
     items: list[dict[str, str | None]] = []
     failures: list[dict[str, str | None]] = []
+    fetcher = {
+        "chinabond_index": fetch_chinabond_bond_index,
+        "csindex_bond_index": fetch_csindex_bond_index,
+        "cnindex_bond_index": fetch_cnindex_bond_index,
+    }[target]
     for index_id, index_name, index_code in zip(args.index_id, names, codes):
         items.append({"index_id": index_id, "index_name": index_name, "index_code": index_code})
         try:
             stats_list.append(
-                fetch_bond_index_duration(
+                fetcher(
                     index_id,
                     dry_run=args.dry_run,
                     db_path=args.db_path,
@@ -133,11 +142,19 @@ def _run_bond_index_backfill(args: argparse.Namespace) -> dict[str, object]:
             )
 
     return {
-        "target": "bond_index",
+        "target": target,
         "items": items,
         "stats": asdict(_merge_stats(stats_list)),
         "failures": failures,
-        "review": _maybe_review("raw_bond_index", enabled=args.review, db_path=args.db_path),
+        "review": _maybe_review(
+            {
+                "chinabond_index": "raw_chinabond_bond_index",
+                "csindex_bond_index": "raw_csindex_bond_index",
+                "cnindex_bond_index": "raw_cnindex_bond_index",
+            }[target],
+            enabled=args.review,
+            db_path=args.db_path,
+        ),
     }
 
 
@@ -149,8 +166,8 @@ def main() -> None:
             result = _run_bond_curve_backfill(args)
         elif args.target == "policy_rate":
             result = _run_policy_rate_backfill(args)
-        elif args.target == "bond_index":
-            result = _run_bond_index_backfill(args)
+        elif args.target in {"chinabond_index", "csindex_bond_index", "cnindex_bond_index"}:
+            result = _run_bond_index_backfill(args, target=args.target)
         else:
             raise ValueError(f"unsupported target: {args.target}")
     except ValueError as exc:

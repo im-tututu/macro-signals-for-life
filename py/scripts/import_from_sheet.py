@@ -820,10 +820,8 @@ def merge_staged_data(conn: sqlite3.Connection) -> dict[str, int]:
         ("原始_指数ETF", migrated_at),
     )
 
-    counts["raw_bond_index"] = merge_table(
-        conn,
-        f"""
-        INSERT OR REPLACE INTO raw_bond_index (
+    bond_index_insert_sql = f"""
+        INSERT OR REPLACE INTO {{target_table}} (
             trade_date, index_name, index_code, provider, type_lv1, type_lv2, type_lv3,
             source_url, data_date, dm, y, cons_number, d, v, fetch_status, raw_json, fetched_at, error,
             source_sheet, source_row_num, migrated_at
@@ -851,7 +849,31 @@ def merge_staged_data(conn: sqlite3.Connection) -> dict[str, int]:
         FROM stg_sheet_raw_bond_index
         WHERE {nonblank('trade_date')} IS NOT NULL
           AND {nonblank('index_name')} IS NOT NULL
-        """,
+          AND {{provider_filter}}
+        """
+
+    counts["raw_chinabond_bond_index"] = merge_table(
+        conn,
+        bond_index_insert_sql.format(
+            target_table="raw_chinabond_bond_index",
+            provider_filter=f"{nonblank('provider')} IN ('中债', 'CHINABOND')",
+        ),
+        ("原始_债券指数特征", migrated_at),
+    )
+    counts["raw_csindex_bond_index"] = merge_table(
+        conn,
+        bond_index_insert_sql.format(
+            target_table="raw_csindex_bond_index",
+            provider_filter=f"{nonblank('provider')} IN ('中证', 'CSINDEX')",
+        ),
+        ("原始_债券指数特征", migrated_at),
+    )
+    counts["raw_cnindex_bond_index"] = merge_table(
+        conn,
+        bond_index_insert_sql.format(
+            target_table="raw_cnindex_bond_index",
+            provider_filter=f"{nonblank('provider')} IN ('国证', 'CNINDEX')",
+        ),
         ("原始_债券指数特征", migrated_at),
     )
 

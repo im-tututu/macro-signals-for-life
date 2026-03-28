@@ -29,7 +29,9 @@ except Exception:
 # 正式 raw 表 -> 目标 worksheet 名
 RAW_TABLE_TITLE_MAP = {
     "raw_bond_curve": "原始_收益率曲线",
-    "raw_bond_index": "原始_债券指数特征",
+    "raw_chinabond_bond_index": "原始_中债债券指数特征",
+    "raw_csindex_bond_index": "原始_中证债券指数特征",
+    "raw_cnindex_bond_index": "原始_国证债券指数特征",
     "raw_policy_rate": "原始_政策利率",
     "raw_money_market": "原始_资金面",
     "raw_futures": "原始_国债期货",

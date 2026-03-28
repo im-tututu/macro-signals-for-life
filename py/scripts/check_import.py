@@ -46,7 +46,21 @@ DEFAULT_SPECS: tuple[TableCheckSpec, ...] = (
         sample_order_by="date DESC",
     ),
     TableCheckSpec(
-        table_name="raw_bond_index",
+        table_name="raw_chinabond_bond_index",
+        date_col="trade_date",
+        key_cols=("trade_date", "index_name"),
+        important_cols=("trade_date", "index_name", "index_code", "y", "d"),
+        sample_order_by="trade_date DESC, index_name ASC",
+    ),
+    TableCheckSpec(
+        table_name="raw_csindex_bond_index",
+        date_col="trade_date",
+        key_cols=("trade_date", "index_name"),
+        important_cols=("trade_date", "index_name", "index_code", "y", "d"),
+        sample_order_by="trade_date DESC, index_name ASC",
+    ),
+    TableCheckSpec(
+        table_name="raw_cnindex_bond_index",
         date_col="trade_date",
         key_cols=("trade_date", "index_name"),
         important_cols=("trade_date", "index_name", "index_code", "y", "d"),

@@ -87,10 +87,22 @@ def fetch_latest_sse_lively_bond_snapshot(*args, **kwargs):
     return _fetch_latest_sse_lively_bond_snapshot(*args, **kwargs)
 
 
-def fetch_bond_index_duration(*args, **kwargs):
-    from .ingest import fetch_bond_index_duration as _fetch_bond_index_duration
+def fetch_chinabond_bond_index(*args, **kwargs):
+    from .ingest import fetch_chinabond_bond_index as _fetch_chinabond_bond_index
 
-    return _fetch_bond_index_duration(*args, **kwargs)
+    return _fetch_chinabond_bond_index(*args, **kwargs)
+
+
+def fetch_csindex_bond_index(*args, **kwargs):
+    from .ingest import fetch_csindex_bond_index as _fetch_csindex_bond_index
+
+    return _fetch_csindex_bond_index(*args, **kwargs)
+
+
+def fetch_cnindex_bond_index(*args, **kwargs):
+    from .ingest import fetch_cnindex_bond_index as _fetch_cnindex_bond_index
+
+    return _fetch_cnindex_bond_index(*args, **kwargs)
 
 __all__ = [
     "run_daily_fetcher",
@@ -107,7 +119,9 @@ __all__ = [
     "fetch_latest_qdii_snapshot",
     "fetch_latest_treasury_snapshot",
     "fetch_latest_sse_lively_bond_snapshot",
-    "fetch_bond_index_duration",
+    "fetch_chinabond_bond_index",
+    "fetch_csindex_bond_index",
+    "fetch_cnindex_bond_index",
     "DAILY_JOB_REGISTRY",
     "get_daily_job_spec",
     "clean_table",

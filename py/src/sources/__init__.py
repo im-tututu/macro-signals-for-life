@@ -4,6 +4,8 @@ from .alpha_vantage import AlphaVantageSource
 from ._base import BaseSource, FetchResult
 from .chinabond import ChinaBondIndexSource, ChinaBondSource
 from .chinamoney import ChinaMoneySource
+from .cnindex import CnindexBondSource
+from .csindex import CsindexBondSource
 from .fred import FredSource
 from .jisilu import JisiluEtfSource, JisiluQdiiSource, JisiluTreasurySource
 from .pbc import PbcSource
@@ -17,6 +19,8 @@ __all__ = [
     "ChinaBondIndexSource",
     "ChinaBondSource",
     "ChinaMoneySource",
+    "CnindexBondSource",
+    "CsindexBondSource",
     "FetchResult",
     "FredSource",
     "JisiluEtfSource",

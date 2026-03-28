@@ -73,6 +73,8 @@ class BondIndexSnapshot:
     index_id: str
     duration: Optional[float]
     ytm: Optional[float]
+    cons_number: Optional[float]
+    modified_duration: Optional[float]
     convexity: Optional[float]
     source: str
     meta: Dict[str, Any] = field(default_factory=dict)

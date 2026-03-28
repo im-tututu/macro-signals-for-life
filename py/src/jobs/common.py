@@ -8,7 +8,9 @@ from src.core.runtime import RunContext, WriteStats
 from src.sources._base import FetchResult
 from src.stores import (
     BondCurveStore,
-    BondIndexStore,
+    ChinabondBondIndexStore,
+    CnindexBondIndexStore,
+    CsindexBondIndexStore,
     EtfStore,
     FuturesStore,
     MetricsStore,
@@ -28,7 +30,9 @@ T = TypeVar("T")
 
 STORE_REGISTRY: dict[str, type[BaseSqliteStore]] = {
     "raw_bond_curve": BondCurveStore,
-    "raw_bond_index": BondIndexStore,
+    "raw_chinabond_bond_index": ChinabondBondIndexStore,
+    "raw_csindex_bond_index": CsindexBondIndexStore,
+    "raw_cnindex_bond_index": CnindexBondIndexStore,
     "raw_policy_rate": PolicyRateStore,
     "raw_money_market": MoneyMarketStore,
     "raw_fred": FredStore,

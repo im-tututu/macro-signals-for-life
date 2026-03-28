@@ -7,7 +7,9 @@ from __future__ import annotations
 
 from .ingest import (
     fetch_bond_curve_for_date,
-    fetch_bond_index_duration,
+    fetch_chinabond_bond_index,
+    fetch_cnindex_bond_index,
+    fetch_csindex_bond_index,
     fetch_latest_alpha_vantage,
     fetch_latest_bond_curve,
     fetch_latest_etf_snapshot,
@@ -30,5 +32,7 @@ __all__ = [
     "fetch_latest_policy_rate",
     "fetch_latest_futures",
     "fetch_latest_etf_snapshot",
-    "fetch_bond_index_duration",
+    "fetch_chinabond_bond_index",
+    "fetch_csindex_bond_index",
+    "fetch_cnindex_bond_index",
 ]

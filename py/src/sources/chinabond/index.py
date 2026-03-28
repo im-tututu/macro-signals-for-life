@@ -10,8 +10,6 @@ from src.core.utils import now_text, to_float
 from .._base import BaseSource, FetchResult
 
 CHINABOND_INDEX_SINGLE_QUERY_URL = "https://yield.chinabond.com.cn/cbweb-mn/indices/singleIndexQueryResult"
-CSI_BOND_FEATURE_URL = "https://www.csindex.com.cn/csindex-home/perf/get-bond-index-feature/{code}"
-CNI_BOND_FEATURE_URL = "https://www.cnindex.com.cn/module/index-detail.html?act_menu=1&indexCode={code}"
 TZ_SH = dt.timezone(dt.timedelta(hours=8))
 
 
@@ -105,6 +103,8 @@ class ChinaBondIndexSource(BaseSource):
             index_id=index_id,
             duration=duration["value"],
             ytm=ytm["value"] if ytm else None,
+            cons_number=None,
+            modified_duration=None,
             convexity=convexity["value"] if convexity else None,
             source=CHINABOND_INDEX_SINGLE_QUERY_URL,
             meta={"raw_keys": list(payload.keys())},
@@ -143,19 +143,3 @@ class ChinaBondIndexSource(BaseSource):
                 },
             ),
         )
-
-    def fetch_csindex_bond_feature(self, code: str) -> Dict[str, Any]:
-        url = CSI_BOND_FEATURE_URL.format(code=code)
-        data = self.http.get_json(url, headers={"Accept": "application/json, text/plain, */*"})
-        return data.get("data", data)
-
-    def fetch_cnindex_bond_feature(self, code: str) -> Dict[str, Any]:
-        url = CNI_BOND_FEATURE_URL.format(code=code)
-        text = self.http.get_text(url, headers={"Accept": "application/json, text/plain, */*"})
-        try:
-            import json
-
-            parsed = json.loads(text)
-            return parsed.get("data", parsed)
-        except Exception:  # noqa: BLE001
-            return {"raw": text}

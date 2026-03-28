@@ -109,7 +109,9 @@ TABLE_RAW_JISILU_ETF: Final[str] = "raw_jisilu_etf"
 TABLE_RAW_JISILU_QDII: Final[str] = "raw_jisilu_qdii"
 TABLE_RAW_JISILU_TREASURY: Final[str] = "raw_jisilu_treasury"
 TABLE_RAW_SSE_LIVELY_BOND: Final[str] = "raw_sse_lively_bond"
-TABLE_RAW_BOND_INDEX: Final[str] = "raw_bond_index"
+TABLE_RAW_CHINABOND_BOND_INDEX: Final[str] = "raw_chinabond_bond_index"
+TABLE_RAW_CSINDEX_BOND_INDEX: Final[str] = "raw_csindex_bond_index"
+TABLE_RAW_CNINDEX_BOND_INDEX: Final[str] = "raw_cnindex_bond_index"
 TABLE_METRICS: Final[str] = "metrics"
 TABLE_SIGNAL_MAIN: Final[str] = "signal_main"
 TABLE_SIGNAL_DETAIL: Final[str] = "signal_detail"
@@ -129,7 +131,9 @@ RAW_TABLES: Final[list[str]] = [
     TABLE_RAW_JISILU_QDII,
     TABLE_RAW_JISILU_TREASURY,
     TABLE_RAW_SSE_LIVELY_BOND,
-    TABLE_RAW_BOND_INDEX,
+    TABLE_RAW_CHINABOND_BOND_INDEX,
+    TABLE_RAW_CSINDEX_BOND_INDEX,
+    TABLE_RAW_CNINDEX_BOND_INDEX,
 ]
 
 # -----------------------------

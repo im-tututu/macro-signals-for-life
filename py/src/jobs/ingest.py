@@ -397,7 +397,7 @@ def fetch_latest_sse_lively_bond_snapshot(
     )
 
 
-def fetch_bond_index_duration(
+def fetch_chinabond_bond_index(
     index_id: str,
     *,
     dry_run: bool = False,
@@ -408,16 +408,66 @@ def fetch_bond_index_duration(
     """抓取单个中债指数特征并写入原始债券指数表。"""
 
     from src.sources.chinabond import ChinaBondIndexSource
-    from src.stores.bond_index import BondIndexStore
+    from src.stores.bond_index import ChinabondBondIndexStore
 
-    store = BondIndexStore(db_path=db_path)
+    store = ChinabondBondIndexStore(db_path=db_path)
     source = ChinaBondIndexSource()
     return run_fetch_transform_job(
         store=store,
         fetch=lambda: source.fetch_duration_snapshot_result(index_id, index_name=index_name, index_code=index_code),
         row_builder=store.build_row_from_fetch_result,
-        job_name="daily_raw_bond_index",
+        job_name="daily_raw_chinabond_bond_index",
         source_type="chinabond_index_single",
+        dry_run=dry_run,
+        incremental=True,
+        inclusive=True,
+    )
+
+
+def fetch_csindex_bond_index(
+    index_id: str,
+    *,
+    dry_run: bool = False,
+    db_path: Path | None = None,
+    index_name: str | None = None,
+    index_code: str | None = None,
+):
+    from src.sources.csindex import CsindexBondSource
+    from src.stores.bond_index import CsindexBondIndexStore
+
+    store = CsindexBondIndexStore(db_path=db_path)
+    source = CsindexBondSource()
+    return run_fetch_transform_job(
+        store=store,
+        fetch=lambda: source.fetch_feature_snapshot_result(index_id, index_name=index_name, index_code=index_code),
+        row_builder=store.build_row_from_fetch_result,
+        job_name="daily_raw_csindex_bond_index",
+        source_type="csindex_bond_feature",
+        dry_run=dry_run,
+        incremental=True,
+        inclusive=True,
+    )
+
+
+def fetch_cnindex_bond_index(
+    index_id: str,
+    *,
+    dry_run: bool = False,
+    db_path: Path | None = None,
+    index_name: str | None = None,
+    index_code: str | None = None,
+):
+    from src.sources.cnindex import CnindexBondSource
+    from src.stores.bond_index import CnindexBondIndexStore
+
+    store = CnindexBondIndexStore(db_path=db_path)
+    source = CnindexBondSource()
+    return run_fetch_transform_job(
+        store=store,
+        fetch=lambda: source.fetch_feature_snapshot_result(index_id, index_name=index_name, index_code=index_code),
+        row_builder=store.build_row_from_fetch_result,
+        job_name="daily_raw_cnindex_bond_index",
+        source_type="cnindex_bond_feature",
         dry_run=dry_run,
         incremental=True,
         inclusive=True,
