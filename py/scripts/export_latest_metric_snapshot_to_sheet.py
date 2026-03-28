@@ -20,10 +20,20 @@ except Exception:
             sys.path.insert(0, str(CURRENT_DIR))
         from src.core.config import AppConfig, getenv_first, load_local_env  # type: ignore
 
+from export_latest_investment_snapshot import connect_readonly as connect_investment_db  # type: ignore
+from export_latest_investment_snapshot import (
+    build_bond_index_rows,
+    build_csindex_equity_rows,
+    build_etf_match_map,
+    build_investment_underlying_rows,
+    build_representative_product_map,
+    build_treasury_merged_rows,
+)
+
 
 def build_parser(cfg: AppConfig) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="将 metric_snapshot 最新日期的数据写入指定 Google Spreadsheet；若同名工作表已存在则覆盖，否则新增。"
+        description="将最新快照写入指定 Google Spreadsheet；默认导出 metric_snapshot，也可导出日期+工具快照。"
     )
     parser.add_argument(
         "--db",
@@ -53,6 +63,12 @@ def build_parser(cfg: AppConfig) -> argparse.ArgumentParser:
         "--worksheet",
         default=None,
         help="可选工作表名覆盖值；默认使用快照日期。",
+    )
+    parser.add_argument(
+        "--content",
+        choices=("metric", "investment"),
+        default="metric",
+        help="导出内容类型。默认 metric；investment 会导出日期+工具快照。",
     )
     parser.add_argument(
         "--env-file",
@@ -127,6 +143,72 @@ def fetch_snapshot_rows(conn: sqlite3.Connection, as_of_date: str) -> list[list[
     normalized = [normalize_snapshot_row(headers, list(row), snapshot_code_set=full_code_set) for row in all_rows]
     out.extend(normalized)
     return out
+
+
+def fetch_latest_investment_anchor_date(conn: sqlite3.Connection) -> str:
+    candidates = [
+        str(fetch_scalar(conn, "SELECT MAX(snapshot_date) FROM raw_jisilu_etf") or ""),
+        str(fetch_scalar(conn, "SELECT MAX(snapshot_date) FROM raw_jisilu_qdii") or ""),
+        str(fetch_scalar(conn, "SELECT MAX(snapshot_date) FROM raw_jisilu_treasury") or ""),
+        str(fetch_scalar(conn, "SELECT MAX(trade_date) FROM raw_sse_lively_bond") or ""),
+        str(fetch_scalar(conn, "SELECT MAX(date) FROM raw_bond_curve") or ""),
+    ]
+    value = max(candidates)
+    if not value:
+        raise RuntimeError("未找到可用的投资工具最新日期。")
+    return value
+
+
+def fetch_scalar(conn: sqlite3.Connection, sql: str, params: tuple[object, ...] = ()) -> object | None:
+    row = conn.execute(sql, params).fetchone()
+    if row is None:
+        return None
+    return row[0]
+
+
+def fetch_investment_snapshot_rows(conn: sqlite3.Connection, anchor_date: str) -> list[list[object]]:
+    etf_match_map = build_etf_match_map(conn, anchor_date)
+    product_map = build_representative_product_map(conn, anchor_date)
+    records: list[dict[str, object]] = []
+    records.extend(build_bond_index_rows(conn, anchor_date, etf_match_map, product_map))
+    records.extend(build_csindex_equity_rows(conn, anchor_date, etf_match_map, product_map))
+    records.extend(build_investment_underlying_rows(conn, anchor_date, etf_match_map, product_map))
+    records.extend(build_treasury_merged_rows(conn, anchor_date))
+    records.sort(key=lambda item: (str(item["asset_bucket"]), str(item["asset_type"]), str(item["category_l2"]), str(item["name"])))
+
+    headers = [
+        "date",
+        "name",
+        "asset_bucket",
+        "asset_type",
+        "provider",
+        "source_table",
+        "code",
+        "available_etf_count",
+        "representative_fund_type",
+        "representative_fund_name",
+        "representative_fund_code",
+        "representative_fund_issuer",
+        "representative_fund_scale_yi",
+        "representative_fee_pct",
+        "apply_fee_pct",
+        "redeem_fee_pct",
+        "category_l1",
+        "category_l2",
+        "invest_region",
+        "underlying_currency",
+        "duration_years",
+        "duration_risk_level",
+        "ytm_pct",
+        "net_yield_after_fee_pct",
+        "price_or_nav",
+        "premium_discount_pct",
+        "risk_return_note",
+    ]
+    rows: list[list[object]] = [headers]
+    for record in records:
+        rows.append([record.get(header, "") for header in headers])
+    return rows
 
 
 def normalize_snapshot_row(
@@ -340,6 +422,63 @@ def export_metric_snapshot_to_sheet(
     }
 
 
+def export_latest_snapshot_to_sheet(
+    *,
+    db: str | Path,
+    creds: str | None = None,
+    spreadsheet_id: str | None = None,
+    as_of_date: str | None = None,
+    worksheet: str | None = None,
+    env_file: str | None = None,
+    content: str = "metric",
+) -> dict[str, object]:
+    db_path = Path(db).expanduser()
+    if not db_path.exists():
+        raise FileNotFoundError(f"Database not found: {db_path}")
+
+    if content == "metric":
+        return export_metric_snapshot_to_sheet(
+            db=db,
+            creds=creds,
+            spreadsheet_id=spreadsheet_id,
+            as_of_date=as_of_date,
+            worksheet=worksheet,
+            env_file=env_file,
+        )
+
+    log(f"[INFO] 使用数据库: {db_path}")
+    log("[INFO] 正在读取日期+工具最新快照日期...")
+    conn = connect_investment_db(db_path)
+    try:
+        resolved_as_of_date = as_of_date or fetch_latest_investment_anchor_date(conn)
+        resolved_worksheet_title = worksheet or f"{resolved_as_of_date}+工具"
+        log(f"[INFO] 目标快照日期: {resolved_as_of_date}")
+        log("[INFO] 正在查询日期+工具快照...")
+        rows = fetch_investment_snapshot_rows(conn, resolved_as_of_date)
+    finally:
+        conn.close()
+
+    data_row_count = max(len(rows) - 1, 0)
+    log(f"[INFO] 已读取 {data_row_count} 行，目标工作表: {resolved_worksheet_title}")
+    from src.outputs.sheets import GoogleSheetsWriter  # type: ignore
+
+    writer = GoogleSheetsWriter(
+        credentials_path=creds,
+        spreadsheet_id=spreadsheet_id,
+        env_file=env_file,
+    )
+    writer.replace_all(resolved_worksheet_title, rows)
+    log("[INFO] 日期+工具快照写入完成")
+    return {
+        "db_path": str(db_path),
+        "as_of_date": resolved_as_of_date,
+        "worksheet_title": resolved_worksheet_title,
+        "spreadsheet_id": writer.spreadsheet_id,
+        "data_row_count": data_row_count,
+        "content": content,
+    }
+
+
 def main() -> None:
     log("[INFO] 脚本启动")
     log("[INFO] 正在加载本地环境配置...")
@@ -351,13 +490,14 @@ def main() -> None:
         log(f"[INFO] 重新加载 env 文件: {args.env_file}")
         load_local_env(env_file=args.env_file)
 
-    export_metric_snapshot_to_sheet(
+    export_latest_snapshot_to_sheet(
         db=args.db,
         creds=args.creds,
         spreadsheet_id=args.spreadsheet_id,
         as_of_date=args.as_of_date,
         worksheet=args.worksheet,
         env_file=args.env_file,
+        content=args.content,
     )
 
 

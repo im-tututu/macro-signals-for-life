@@ -23,6 +23,9 @@ ETF_NUMERIC_FIELDS = (
     "creation_unit",
     "pe",
     "pb",
+    "m_fee",
+    "t_fee",
+    "mt_fee",
     "apply_fee",
     "redeem_fee",
     "records_total",
@@ -85,6 +88,26 @@ class EtfStore(BaseSqliteStore):
     def __init__(self, db_path: Path | None = None, *, auto_init: bool = True) -> None:
         super().__init__(db_path=db_path, auto_init=auto_init)
 
+    def initialize(self) -> None:
+        super().initialize()
+        self._ensure_fee_columns()
+
+    def _ensure_fee_columns(self) -> None:
+        required_columns = {
+            "m_fee": "REAL",
+            "t_fee": "REAL",
+            "mt_fee": "REAL",
+        }
+        existing = set(self.table_columns)
+        missing = [(name, col_type) for name, col_type in required_columns.items() if name not in existing]
+        if not missing:
+            return
+        with self._connect() as conn:
+            for name, col_type in missing:
+                conn.execute(f"ALTER TABLE {self.spec.table_name} ADD COLUMN {name} {col_type}")
+            conn.commit()
+        self.reset_column_cache()
+
     @staticmethod
     def build_row_from_payload_row(
         snapshot_date: str,
@@ -116,6 +139,9 @@ class EtfStore(BaseSqliteStore):
             "creation_unit": to_float(cell.get("creation_unit")),
             "pe": to_float(cell.get("pe")),
             "pb": to_float(cell.get("pb")),
+            "m_fee": to_float(cell.get("m_fee")),
+            "t_fee": to_float(cell.get("t_fee")),
+            "mt_fee": to_float(cell.get("mt_fee")),
             "last_time": str(cell.get("last_time") or ""),
             "last_est_time": str(cell.get("last_est_time") or ""),
             "is_qdii": str(cell.get("is_qdii") or ""),
