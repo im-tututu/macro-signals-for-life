@@ -342,7 +342,10 @@ def _env_path(*names: str) -> Path | None:
     value = _env_text(*names)
     if not value:
         return None
-    return Path(value).expanduser().resolve()
+    path = Path(value).expanduser()
+    if path.is_absolute():
+        return path.resolve()
+    return (REPO_ROOT / path).resolve()
 
 
 def _env_bool(*names: str, default: bool = False) -> bool:

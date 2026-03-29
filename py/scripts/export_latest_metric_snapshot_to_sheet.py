@@ -66,9 +66,9 @@ def build_parser(cfg: AppConfig) -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--content",
-        choices=("metric", "investment"),
+        choices=("metric", "investment", "invest_bucket"),
         default="metric",
-        help="导出内容类型。默认 metric；investment 会导出日期+工具快照。",
+        help="导出内容类型。默认 metric；investment 会导出日期+工具快照；invest_bucket 会导出投资侧归桶结果与规则表。",
     )
     parser.add_argument(
         "--env-file",
@@ -208,6 +208,116 @@ def fetch_investment_snapshot_rows(conn: sqlite3.Connection, anchor_date: str) -
     rows: list[list[object]] = [headers]
     for record in records:
         rows.append([record.get(header, "") for header in headers])
+    return rows
+
+
+def fetch_invest_bucket_rows(conn: sqlite3.Connection) -> list[list[object]]:
+    headers = [
+        "snapshot_date",
+        "instrument_id",
+        "instrument_type",
+        "instrument_code",
+        "instrument_name",
+        "issuer_name",
+        "source_table",
+        "exposure_name",
+        "exposure_key",
+        "exposure_method",
+        "duration_band",
+        "bucket_match_key",
+        "bucket_id",
+        "bucket_name_cn",
+        "asset_class",
+        "issuer_type",
+        "bucket_duration_band",
+        "region_tag",
+        "style_tag",
+        "bucket_match_method",
+        "bucket_match_confidence",
+        "needs_bucket_review",
+        "price",
+        "amount_yi",
+        "volume_wan",
+        "unit_total_yi",
+        "premium_discount_rt",
+        "apply_status",
+        "redeem_status",
+        "duration",
+        "ytm",
+    ]
+    cur = conn.execute(
+        """
+        SELECT
+            snapshot_date,
+            instrument_id,
+            instrument_type,
+            instrument_code,
+            instrument_name,
+            issuer_name,
+            source_table,
+            exposure_name,
+            exposure_key,
+            exposure_method,
+            duration_band,
+            bucket_match_key,
+            bucket_id,
+            bucket_name_cn,
+            asset_class,
+            issuer_type,
+            bucket_duration_band,
+            region_tag,
+            style_tag,
+            bucket_match_method,
+            bucket_match_confidence,
+            needs_bucket_review,
+            price,
+            amount_yi,
+            volume_wan,
+            unit_total_yi,
+            premium_discount_rt,
+            apply_status,
+            redeem_status,
+            duration,
+            ytm
+        FROM vw_invest_bucket_latest
+        ORDER BY
+            COALESCE(bucket_id, 'zz_unknown'),
+            instrument_type,
+            exposure_name,
+            instrument_name
+        """
+    )
+    rows = [headers]
+    rows.extend([list(row) for row in cur.fetchall()])
+    return rows
+
+
+def fetch_invest_bucket_rule_rows(conn: sqlite3.Connection) -> list[list[object]]:
+    headers = [
+        "exposure_key",
+        "exposure_name",
+        "bucket_id",
+        "match_method",
+        "match_confidence",
+        "note",
+        "updated_at",
+    ]
+    cur = conn.execute(
+        """
+        SELECT
+            exposure_key,
+            exposure_name,
+            bucket_id,
+            match_method,
+            match_confidence,
+            note,
+            updated_at
+        FROM map_invest_exposure_bucket
+        ORDER BY exposure_key
+        """
+    )
+    rows = [headers]
+    rows.extend([list(row) for row in cur.fetchall()])
     return rows
 
 
@@ -446,35 +556,68 @@ def export_latest_snapshot_to_sheet(
             env_file=env_file,
         )
 
+    from src.outputs.sheets import GoogleSheetsWriter  # type: ignore
+
+    if content == "investment":
+        log(f"[INFO] 使用数据库: {db_path}")
+        log("[INFO] 正在读取日期+工具最新快照日期...")
+        conn = connect_investment_db(db_path)
+        try:
+            resolved_as_of_date = as_of_date or fetch_latest_investment_anchor_date(conn)
+            resolved_worksheet_title = worksheet or f"{resolved_as_of_date}+工具"
+            log(f"[INFO] 目标快照日期: {resolved_as_of_date}")
+            log("[INFO] 正在查询日期+工具快照...")
+            rows = fetch_investment_snapshot_rows(conn, resolved_as_of_date)
+        finally:
+            conn.close()
+
+        data_row_count = max(len(rows) - 1, 0)
+        log(f"[INFO] 已读取 {data_row_count} 行，目标工作表: {resolved_worksheet_title}")
+        writer = GoogleSheetsWriter(
+            credentials_path=creds,
+            spreadsheet_id=spreadsheet_id,
+            env_file=env_file,
+        )
+        writer.replace_all(resolved_worksheet_title, rows)
+        log("[INFO] 日期+工具快照写入完成")
+        return {
+            "db_path": str(db_path),
+            "as_of_date": resolved_as_of_date,
+            "worksheet_title": resolved_worksheet_title,
+            "spreadsheet_id": writer.spreadsheet_id,
+            "data_row_count": data_row_count,
+            "content": content,
+        }
+
     log(f"[INFO] 使用数据库: {db_path}")
-    log("[INFO] 正在读取日期+工具最新快照日期...")
+    log("[INFO] 正在读取投资侧归桶结果与规则表...")
     conn = connect_investment_db(db_path)
     try:
-        resolved_as_of_date = as_of_date or fetch_latest_investment_anchor_date(conn)
-        resolved_worksheet_title = worksheet or f"{resolved_as_of_date}+工具"
-        log(f"[INFO] 目标快照日期: {resolved_as_of_date}")
-        log("[INFO] 正在查询日期+工具快照...")
-        rows = fetch_investment_snapshot_rows(conn, resolved_as_of_date)
+        result_rows = fetch_invest_bucket_rows(conn)
+        rule_rows = fetch_invest_bucket_rule_rows(conn)
     finally:
         conn.close()
 
-    data_row_count = max(len(rows) - 1, 0)
-    log(f"[INFO] 已读取 {data_row_count} 行，目标工作表: {resolved_worksheet_title}")
-    from src.outputs.sheets import GoogleSheetsWriter  # type: ignore
+    result_worksheet_title = worksheet or "投资侧_最新归桶结果"
+    rule_worksheet_title = "投资侧_人工修正规则"
+    result_count = max(len(result_rows) - 1, 0)
+    rule_count = max(len(rule_rows) - 1, 0)
 
     writer = GoogleSheetsWriter(
         credentials_path=creds,
         spreadsheet_id=spreadsheet_id,
         env_file=env_file,
     )
-    writer.replace_all(resolved_worksheet_title, rows)
-    log("[INFO] 日期+工具快照写入完成")
+    writer.replace_all(result_worksheet_title, result_rows)
+    writer.replace_all(rule_worksheet_title, rule_rows)
+    log("[INFO] 投资侧归桶结果与规则表写入完成")
     return {
         "db_path": str(db_path),
-        "as_of_date": resolved_as_of_date,
-        "worksheet_title": resolved_worksheet_title,
+        "worksheet_title": result_worksheet_title,
+        "rule_worksheet_title": rule_worksheet_title,
         "spreadsheet_id": writer.spreadsheet_id,
-        "data_row_count": data_row_count,
+        "data_row_count": result_count,
+        "rule_row_count": rule_count,
         "content": content,
     }
 
