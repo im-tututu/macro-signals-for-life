@@ -234,7 +234,7 @@ async function refreshJisiluCookie() {
         ___jsl: `LST___t=${Date.now()}`,
         rp: "500",
         page: "1",
-        unit_total: "2",
+        unit_total: "",
         volume: "",
       },
       headers: {
@@ -258,7 +258,7 @@ async function refreshJisiluCookie() {
               ___jsl: `LST___t=${Date.now()}`,
               rp: "500",
               page: "1",
-              unit_total: "2",
+              unit_total: "",
               volume: "",
             },
             headers: {

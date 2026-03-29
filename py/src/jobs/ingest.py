@@ -260,7 +260,7 @@ def fetch_latest_etf_snapshot(
     snapshot_date: str | None = None,
     rows_per_page: int = 500,
     max_pages: int = 20,
-    min_unit_total_yi: float | int | str = 2,
+    min_unit_total_yi: float | int | str = "",
     min_volume_wan: float | int | str = "",
 ):
     """抓取最新指数 ETF 快照并写入原始 ETF 表。"""

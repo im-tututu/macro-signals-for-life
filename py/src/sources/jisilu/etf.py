@@ -114,7 +114,7 @@ class JisiluEtfSource(BaseSource):
         *,
         page: int = 1,
         rows_per_page: int = 500,
-        min_unit_total_yi: float | int | str = 2,
+        min_unit_total_yi: float | int | str = "",
         min_volume_wan: float | int | str = "",
         extra_query_string: str = "",
     ) -> Dict[str, Any]:
@@ -144,7 +144,7 @@ class JisiluEtfSource(BaseSource):
         snapshot_date: str | None = None,
         rows_per_page: int = 500,
         max_pages: int = 20,
-        min_unit_total_yi: float | int | str = 2,
+        min_unit_total_yi: float | int | str = "",
         min_volume_wan: float | int | str = "",
         extra_query_string: str = "",
     ) -> JisiluEtfSnapshot:
@@ -171,7 +171,7 @@ class JisiluEtfSource(BaseSource):
         snapshot_date: str | None = None,
         rows_per_page: int = 500,
         max_pages: int = 20,
-        min_unit_total_yi: float | int | str = 2,
+        min_unit_total_yi: float | int | str = "",
         min_volume_wan: float | int | str = "",
         extra_query_string: str = "",
     ) -> JisiluEtfSnapshot:
@@ -248,7 +248,7 @@ class JisiluEtfSource(BaseSource):
         snapshot_date: str | None = None,
         rows_per_page: int = 500,
         max_pages: int = 20,
-        min_unit_total_yi: float | int | str = 2,
+        min_unit_total_yi: float | int | str = "",
         min_volume_wan: float | int | str = "",
         extra_query_string: str = "",
     ) -> FetchResult[JisiluEtfSnapshot]:
