@@ -122,6 +122,18 @@ QDII_SPEC = TableSpec(
 )
 
 
+def compute_unit_total_yi(amount_yi: Any, price: Any, existing: Any = None) -> float | None:
+    if existing not in (None, ""):
+        existing_float = to_float(existing)
+        if existing_float is not None:
+            return existing_float
+    amount = to_float(amount_yi)
+    price_value = to_float(price)
+    if amount is None or price_value is None:
+        return None
+    return amount * price_value / 10000.0
+
+
 @dataclass
 class QdiiEtfStore(BaseSqliteStore):
     """QDII ETF 原始表 store。
@@ -179,7 +191,11 @@ class QdiiEtfStore(BaseSqliteStore):
             "amount_yi": to_float(cell.get("amount")),
             "amount_incr": to_float(cell.get("amount_incr")),
             "amount_increase_rt": to_float(cell.get("amount_increase_rt")),
-            "unit_total_yi": to_float(cell.get("unit_total")),
+            "unit_total_yi": compute_unit_total_yi(
+                cell.get("amount"),
+                cell.get("price"),
+                cell.get("unit_total"),
+            ),
             "discount_rt": to_float(cell.get("discount_rt")),
             "fund_nav": to_float(cell.get("fund_nav")),
             "iopv": to_float(cell.get("iopv")),
@@ -249,7 +265,11 @@ class QdiiEtfStore(BaseSqliteStore):
             "amount_yi": to_float(cell.get("amount")),
             "amount_incr": to_float(cell.get("amount_incr")),
             "amount_increase_rt": to_float(cell.get("amount_increase_rt")),
-            "unit_total_yi": to_float(cell.get("unit_total")),
+            "unit_total_yi": compute_unit_total_yi(
+                cell.get("amount"),
+                cell.get("price"),
+                cell.get("unit_total"),
+            ),
             "discount_rt": to_float(cell.get("discount_rt")),
             "fund_nav": to_float(cell.get("fund_nav")),
             "iopv": to_float(cell.get("iopv")),

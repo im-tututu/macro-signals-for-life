@@ -76,6 +76,18 @@ GOLD_SPEC = TableSpec(
 )
 
 
+def compute_unit_total_yi(amount_yi: Any, fund_nav: Any, existing: Any = None) -> float | None:
+    if existing not in (None, ""):
+        existing_float = to_float(existing)
+        if existing_float is not None:
+            return existing_float
+    amount = to_float(amount_yi)
+    nav = to_float(fund_nav)
+    if amount is None or nav is None:
+        return None
+    return amount * nav / 10000.0
+
+
 @dataclass
 class GoldEtfStore(BaseSqliteStore):
     """集思录黄金 ETF 原始表 store。"""
@@ -106,7 +118,11 @@ class GoldEtfStore(BaseSqliteStore):
             "increase_rt": to_float(cell.get("increase_rt")),
             "volume_wan": to_float(cell.get("volume")),
             "amount_yi": to_float(cell.get("amount")),
-            "unit_total_yi": to_float(cell.get("unit_total")),
+            "unit_total_yi": compute_unit_total_yi(
+                cell.get("amount"),
+                cell.get("fund_nav"),
+                cell.get("unit_total"),
+            ),
             "discount_rt": to_float(cell.get("discount_rt")),
             "fund_nav": to_float(cell.get("fund_nav")),
             "nav_dt": str(cell.get("nav_dt") or ""),
@@ -148,7 +164,11 @@ class GoldEtfStore(BaseSqliteStore):
             "increase_rt": to_float(cell.get("increase_rt")),
             "volume_wan": to_float(cell.get("volume")),
             "amount_yi": to_float(cell.get("amount")),
-            "unit_total_yi": to_float(cell.get("unit_total")),
+            "unit_total_yi": compute_unit_total_yi(
+                cell.get("amount"),
+                cell.get("fund_nav"),
+                cell.get("unit_total"),
+            ),
             "discount_rt": to_float(cell.get("discount_rt")),
             "fund_nav": to_float(cell.get("fund_nav")),
             "nav_dt": str(cell.get("nav_dt") or ""),
