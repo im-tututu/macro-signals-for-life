@@ -1,7 +1,15 @@
 BEGIN;
 
-DROP VIEW IF EXISTS vw_qdii_snapshot_enriched;
-CREATE VIEW vw_qdii_snapshot_enriched AS
+DROP VIEW IF EXISTS vw_qdii_enriched;
+CREATE VIEW vw_qdii_enriched AS
+WITH latest_snapshot AS (
+    SELECT
+        snapshot_date,
+        MAX(fetched_at) AS fetched_at
+    FROM raw_jisilu_qdii
+    WHERE COALESCE(fund_id, '') <> ''
+    GROUP BY snapshot_date
+)
 SELECT
     snapshot_date,
     fetched_at,
@@ -14,7 +22,19 @@ SELECT
     END AS market_label,
     market_code,
     fund_id,
-    COALESCE(NULLIF(fund_nm_display, ''), fund_nm) AS display_name,
+    COALESCE(
+        NULLIF(fund_nm_display, ''),
+        NULLIF(fund_nm, ''),
+        (
+            SELECT COALESCE(NULLIF(r.fund_nm_display, ''), NULLIF(r.fund_nm, ''))
+            FROM raw_jisilu_qdii AS r
+            WHERE r.fund_id = raw_jisilu_qdii.fund_id
+              AND COALESCE(NULLIF(r.fund_nm_display, ''), NULLIF(r.fund_nm, '')) IS NOT NULL
+            ORDER BY COALESCE(NULLIF(TRIM(r.nav_dt), ''), r.snapshot_date) DESC, r.snapshot_date DESC, r.fetched_at DESC
+            LIMIT 1
+        ),
+        fund_id
+    ) AS display_name,
     fund_nm,
     fund_nm_display,
     issuer_nm,
@@ -30,6 +50,7 @@ SELECT
     redeem_status,
     price_dt,
     nav_dt,
+    snapshot_date AS source_snapshot_date,
     iopv_dt,
     last_est_dt,
     last_time,
@@ -43,6 +64,12 @@ SELECT
     volume_wan,
     stock_volume_wan,
     amount_yi,
+    amount_yi AS total_share_wan,
+    volume_wan AS trade_volume_wan,
+    CASE
+        WHEN COALESCE(amount_yi, 0) > 0 AND COALESCE(pre_close, 0) > 0 THEN (amount_yi * pre_close) / 10000.0
+        ELSE unit_total_yi
+    END AS total_scale_yi,
     amount_incr,
     amount_increase_rt,
     turnover_rt,
@@ -63,16 +90,21 @@ SELECT
     source_url,
     records_total
 FROM raw_jisilu_qdii
-WHERE COALESCE(fund_id, '') <> '';
+WHERE COALESCE(fund_id, '') <> ''
+  AND (snapshot_date, fetched_at) IN (
+    SELECT snapshot_date, fetched_at
+    FROM latest_snapshot
+  );
 
 DROP VIEW IF EXISTS vw_qdii_latest;
 CREATE VIEW vw_qdii_latest AS
+WITH latest_nav_dt AS (
+    SELECT MAX(COALESCE(NULLIF(TRIM(nav_dt), ''), snapshot_date)) AS nav_dt
+    FROM vw_qdii_enriched
+)
 SELECT e.*
-FROM vw_qdii_snapshot_enriched AS e
-JOIN (
-    SELECT MAX(snapshot_date) AS latest_snapshot_date
-    FROM raw_jisilu_qdii
-) AS d
-    ON e.snapshot_date = d.latest_snapshot_date;
+FROM vw_qdii_enriched AS e
+JOIN latest_nav_dt AS d
+    ON COALESCE(NULLIF(TRIM(e.nav_dt), ''), e.snapshot_date) = d.nav_dt;
 
 COMMIT;

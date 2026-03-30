@@ -40,7 +40,7 @@ QDII_NUMERIC_FIELDS = (
 
 QDII_SPEC = TableSpec(
     table_name=TABLE_RAW_JISILU_QDII,
-    key_fields=("snapshot_date", "market", "fund_id"),
+    key_fields=("snapshot_date", "fetched_at", "market", "fund_id"),
     date_field="snapshot_date",
     numeric_fields=QDII_NUMERIC_FIELDS,
     integer_fields=("source_row_num",),
@@ -118,18 +118,24 @@ QDII_SPEC = TableSpec(
         "raw_json",
         "migrated_at",
     ),
-    default_order_by=("snapshot_date", "market", "fund_id"),
+    default_order_by=("snapshot_date", "fetched_at", "market", "fund_id"),
 )
 
 
 @dataclass
-class QdiiStore(BaseSqliteStore):
-    """QDII 原始表 store。
+class QdiiEtfStore(BaseSqliteStore):
+    """QDII ETF 原始表 store。
 
     这是和 ETF 原始表并列的新表：
     - source 负责抓取集思录 QDII 分市场视图
     - store 负责把快照列表映射成 raw_jisilu_qdii 多行
     - raw 层保留 market 维度和 raw_json，方便后续细化字段映射
+
+    QDII 页面字段口径和普通 ETF 不完全一致，当前 raw 表里保留了历史列名：
+    - `amount_yi` 实际承载的是页面 `amount`，语义更接近场内总份额，单位是万份
+    - `volume_wan` 对应页面 `volume`，语义是场内成交量，单位是万份
+    - `stock_volume_wan` 对应页面 `stock_volume`，当前语义未完全确认，raw 层先保留原值
+    - `unit_total_yi` 当前不作为 QDII 场内总规模主口径，相关视图应优先用 `amount_yi * pre_close / 10000`
     """
 
     spec: TableSpec = QDII_SPEC
@@ -158,6 +164,79 @@ class QdiiStore(BaseSqliteStore):
             "fund_id": row.fund_id,
             "fund_nm": fund_nm,
             "fund_nm_display": strip_tags(str(cell.get("fund_nm_color") or fund_nm)),
+            "qtype": str(cell.get("qtype") or ""),
+            "index_nm": str(cell.get("index_nm") or cell.get("index_name") or cell.get("ref_nm") or ""),
+            "index_id": str(cell.get("index_id") or ""),
+            "issuer_nm": str(cell.get("issuer_nm") or cell.get("company_nm") or ""),
+            "price": to_float(cell.get("price")),
+            "pre_close": to_float(cell.get("pre_close")),
+            "increase_rt": to_float(cell.get("increase_rt")),
+            # QDII: `volume` 是场内成交量(万份)。
+            "volume_wan": to_float(cell.get("volume")),
+            # QDII: `stock_volume` 语义暂未确认，raw 层先按原字段保留。
+            "stock_volume_wan": to_float(cell.get("stock_volume")),
+            # QDII: `amount` 是场内总份额(万份)，这里沿用历史列名存入 `amount_yi`。
+            "amount_yi": to_float(cell.get("amount")),
+            "amount_incr": to_float(cell.get("amount_incr")),
+            "amount_increase_rt": to_float(cell.get("amount_increase_rt")),
+            "unit_total_yi": to_float(cell.get("unit_total")),
+            "discount_rt": to_float(cell.get("discount_rt")),
+            "fund_nav": to_float(cell.get("fund_nav")),
+            "iopv": to_float(cell.get("iopv")),
+            "ref_price": to_float(cell.get("ref_price")),
+            "ref_increase_rt": to_float(cell.get("ref_increase_rt")),
+            "est_val_increase_rt": to_float(cell.get("est_val_increase_rt")),
+            "m_fee": to_float(cell.get("m_fee")),
+            "t_fee": to_float(cell.get("t_fee")),
+            "mt_fee": to_float(cell.get("mt_fee")),
+            "nav_discount_rt": to_float(cell.get("nav_discount_rt")),
+            "iopv_discount_rt": to_float(cell.get("iopv_discount_rt")),
+            "turnover_rt": to_float(cell.get("turnover_rt")),
+            "price_dt": str(cell.get("price_dt") or ""),
+            "nav_dt": str(cell.get("nav_dt") or ""),
+            "iopv_dt": str(cell.get("iopv_dt") or ""),
+            "estimate_value": to_float(cell.get("estimate_value")),
+            "last_est_dt": str(cell.get("last_est_dt") or ""),
+            "last_time": str(cell.get("last_time") or ""),
+            "last_est_time": str(cell.get("last_est_time") or ""),
+            "apply_fee": str(cell.get("apply_fee") or ""),
+            "apply_status": str(cell.get("apply_status") or ""),
+            "apply_fee_tips": str(cell.get("apply_fee_tips") or ""),
+            "redeem_fee": str(cell.get("redeem_fee") or ""),
+            "redeem_status": str(cell.get("redeem_status") or ""),
+            "redeem_fee_tips": str(cell.get("redeem_fee_tips") or ""),
+            "money_cd": str(cell.get("money_cd") or ""),
+            "asset_ratio": str(cell.get("asset_ratio") or ""),
+            "lof_type": str(cell.get("lof_type") or ""),
+            "t0": str(cell.get("t0") or ""),
+            "eval_show": str(cell.get("eval_show") or ""),
+            "notes": str(cell.get("notes") or ""),
+            "has_iopv": str(cell.get("has_iopv") or ""),
+            "has_us_ref": str(cell.get("has_us_ref") or ""),
+            "records_total": to_float(records_total),
+            "source_url": source_url,
+            "raw_json": json.dumps(cell, ensure_ascii=False, sort_keys=True),
+        }
+
+    @staticmethod
+    def build_row_from_history_cell(
+        snapshot_date: str,
+        fetched_at: str,
+        market: str,
+        market_code: str,
+        fund_id: str,
+        cell: dict[str, Any],
+        *,
+        source_url: str = "",
+    ) -> dict[str, Any]:
+        return {
+            "snapshot_date": snapshot_date,
+            "fetched_at": fetched_at,
+            "market": market,
+            "market_code": market_code,
+            "fund_id": fund_id,
+            "fund_nm": str(cell.get("fund_nm") or cell.get("fund_name") or ""),
+            "fund_nm_display": str(cell.get("fund_nm_color") or cell.get("fund_nm") or ""),
             "qtype": str(cell.get("qtype") or ""),
             "index_nm": str(cell.get("index_nm") or cell.get("index_name") or cell.get("ref_nm") or ""),
             "index_id": str(cell.get("index_id") or ""),
@@ -204,7 +283,7 @@ class QdiiStore(BaseSqliteStore):
             "notes": str(cell.get("notes") or ""),
             "has_iopv": str(cell.get("has_iopv") or ""),
             "has_us_ref": str(cell.get("has_us_ref") or ""),
-            "records_total": to_float(records_total),
+            "records_total": to_float(cell.get("records_total")),
             "source_url": source_url,
             "raw_json": json.dumps(cell, ensure_ascii=False, sort_keys=True),
         }

@@ -23,6 +23,7 @@ except Exception:
 
 RESULT_HEADERS = [
     "snapshot_date",
+    "nav_dt",
     "instrument_id",
     "instrument_type",
     "instrument_code",
@@ -119,6 +120,7 @@ def build_result_rows(conn: sqlite3.Connection) -> list[list[object]]:
         """
         SELECT
             snapshot_date,
+            nav_dt,
             instrument_id,
             instrument_type,
             instrument_code,

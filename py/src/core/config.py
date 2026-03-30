@@ -61,6 +61,8 @@ SHEET_MONEY_MARKET_RAW: Final[str] = "原始_资金面"
 SHEET_MONEY_MARKET_LEGACY: Final[str] = "原始_货币"
 SHEET_FUTURES_RAW: Final[str] = "原始_国债期货"
 SHEET_JISILU_ETF_RAW: Final[str] = "原始_指数ETF"
+SHEET_JISILU_GOLD_RAW: Final[str] = "原始_黄金ETF"
+SHEET_JISILU_MONEY_RAW: Final[str] = "原始_货币ETF"
 SHEET_JISILU_QDII_RAW: Final[str] = "原始_QDII"
 SHEET_JISILU_TREASURY_RAW: Final[str] = "原始_国债现券"
 SHEET_SSE_LIVELY_BOND_RAW: Final[str] = "原始_上交所活跃国债"
@@ -83,6 +85,8 @@ RAW_SHEET_NAMES: Final[list[str]] = [
     SHEET_MONEY_MARKET_LEGACY,
     SHEET_FUTURES_RAW,
     SHEET_JISILU_ETF_RAW,
+    SHEET_JISILU_GOLD_RAW,
+    SHEET_JISILU_MONEY_RAW,
     SHEET_JISILU_QDII_RAW,
     SHEET_JISILU_TREASURY_RAW,
     SHEET_SSE_LIVELY_BOND_RAW,
@@ -106,6 +110,8 @@ TABLE_RAW_POLICY_RATE: Final[str] = "raw_policy_rate"
 TABLE_RAW_MONEY_MARKET: Final[str] = "raw_money_market"
 TABLE_RAW_FUTURES: Final[str] = "raw_futures"
 TABLE_RAW_JISILU_ETF: Final[str] = "raw_jisilu_etf"
+TABLE_RAW_JISILU_GOLD: Final[str] = "raw_jisilu_gold"
+TABLE_RAW_JISILU_MONEY: Final[str] = "raw_jisilu_money"
 TABLE_RAW_JISILU_QDII: Final[str] = "raw_jisilu_qdii"
 TABLE_RAW_JISILU_TREASURY: Final[str] = "raw_jisilu_treasury"
 TABLE_RAW_SSE_LIVELY_BOND: Final[str] = "raw_sse_lively_bond"
@@ -128,6 +134,8 @@ RAW_TABLES: Final[list[str]] = [
     TABLE_RAW_MONEY_MARKET,
     TABLE_RAW_FUTURES,
     TABLE_RAW_JISILU_ETF,
+    TABLE_RAW_JISILU_GOLD,
+    TABLE_RAW_JISILU_MONEY,
     TABLE_RAW_JISILU_QDII,
     TABLE_RAW_JISILU_TREASURY,
     TABLE_RAW_SSE_LIVELY_BOND,
@@ -378,7 +386,7 @@ def ensure_runtime_dirs() -> None:
 
 
 def default_sql_paths() -> list[Path]:
-    paths = sorted(SQL_DIR.glob("000*.sql"))
+    paths = sorted(SQL_DIR.glob("000[1-9]*.sql"))
     if not paths and DEFAULT_INIT_SQL_PATH.exists():
         paths = [DEFAULT_INIT_SQL_PATH]
     return paths

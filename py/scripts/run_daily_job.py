@@ -47,6 +47,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--db", dest="db_path", type=Path, default=None, help="可选 SQLite 路径覆盖。")
     parser.add_argument("--dry-run", action="store_true", help="仅演练，不提交数据库事务。")
+    parser.add_argument("--force", action="store_true", help="强制重跑当天快照，覆盖已存在的同日数据。")
     parser.add_argument("--date", default=None, help="bond_curve 使用的抓取日期，格式 YYYY-MM-DD。")
     parser.add_argument("--limit", type=int, default=20, help="policy_rate_recent 每类事件抓取上限。")
     parser.add_argument("--index-id", default=None, help="债券指数 job 使用的 index id / code。")
@@ -68,6 +69,7 @@ def main() -> None:
         results = execute_daily_job(
             args.job,
             dry_run=args.dry_run,
+            force=args.force,
             db_path=args.db_path,
             date=args.date,
             limit=args.limit,

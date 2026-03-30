@@ -7,7 +7,16 @@ from .chinamoney import ChinaMoneySource
 from .cnindex import CnindexBondSource
 from .csindex import CsindexBondSource
 from .fred import FredSource
-from .jisilu import JisiluEtfSource, JisiluQdiiSource, JisiluTreasurySource
+from .jisilu import (
+    JisiluEtfSource,
+    JisiluGoldEtfSource,
+    JisiluGoldSource,
+    JisiluMoneyEtfSource,
+    JisiluMoneySource,
+    JisiluQdiiEtfSource,
+    JisiluQdiiSource,
+    JisiluTreasurySource,
+)
 from .pbc import PbcSource
 from ._registry import SOURCE_REGISTRY, SourceSpec, get_source_spec
 from .sina_futures import SinaFuturesSource
@@ -24,6 +33,11 @@ __all__ = [
     "FetchResult",
     "FredSource",
     "JisiluEtfSource",
+    "JisiluGoldEtfSource",
+    "JisiluGoldSource",
+    "JisiluMoneyEtfSource",
+    "JisiluMoneySource",
+    "JisiluQdiiEtfSource",
     "JisiluQdiiSource",
     "JisiluTreasurySource",
     "PbcSource",

@@ -14,6 +14,8 @@ from src.core.utils import now_text, today_ymd
 from .._base import BaseSource, FetchResult
 
 JISILU_ETF_LIST_URL = "https://www.jisilu.cn/data/etf/etf_list/"
+JISILU_ETF_DETAIL_HISTS_URL = "https://www.jisilu.cn/data/etf/detail_hists/"
+JISILU_ETF_DETAIL_URL = "https://www.jisilu.cn/data/etf/detail/{fund_id}"
 
 
 class JisiluEtfSource(BaseSource):
@@ -133,6 +135,35 @@ class JisiluEtfSource(BaseSource):
         rows = payload.get("rows", []) or []
         records = payload.get("records", payload.get("total", payload.get("total_rows", "")))
         # “游客仅显示 20 条”是这个来源最常见的隐性失败，需要在来源层直接识别。
+        if self._detect_tourist_limit(raw_text, payload) or self._looks_like_tourist_rows(rows, records):
+            self._notify_cookie_expired()
+            raise RuntimeError("Jisilu tourist limited")
+        return payload
+
+    def fetch_etf_detail_history_page(
+        self,
+        *,
+        fund_id: str,
+        page: int = 1,
+        rows_per_page: int = 50,
+    ) -> Dict[str, Any]:
+        if not fund_id:
+            raise ValueError("fund_id is required")
+        headers = {
+            "Referer": JISILU_ETF_DETAIL_URL.format(fund_id=fund_id),
+            "X-Requested-With": "XMLHttpRequest",
+        }
+        data = {
+            "is_search": 1,
+            "fund_id": fund_id,
+            "rp": rows_per_page,
+            "page": page,
+        }
+        response = self.http.request("POST", JISILU_ETF_DETAIL_HISTS_URL, data=data, headers=headers)
+        raw_text = response.text
+        payload = response.json()
+        rows = payload.get("rows", []) or []
+        records = payload.get("records", payload.get("total", payload.get("total_rows", "")))
         if self._detect_tourist_limit(raw_text, payload) or self._looks_like_tourist_rows(rows, records):
             self._notify_cookie_expired()
             raise RuntimeError("Jisilu tourist limited")
@@ -283,3 +314,79 @@ class JisiluEtfSource(BaseSource):
                 raw_sample=snapshot.meta.get("last_payload"),
             ),
         )
+
+    def fetch_etf_detail_history_result(
+        self,
+        *,
+        fund_id: str,
+        rows_per_page: int = 50,
+        max_pages: int = 2,
+    ) -> FetchResult[dict[str, Any]]:
+        """抓取单只 ETF 的历史明细页。
+
+        该接口更适合补历史，通常只保留近 50 条左右数据，字段比列表页少一些。
+        """
+
+        refreshed = False
+        while True:
+            try:
+                payloads: list[dict[str, Any]] = []
+                seen_dates: set[str] = set()
+                for page in range(1, max_pages + 1):
+                    payload = self.fetch_etf_detail_history_page(
+                        fund_id=fund_id,
+                        page=page,
+                        rows_per_page=rows_per_page,
+                    )
+                    payloads.append(payload)
+                    rows = payload.get("rows", []) or []
+                    if not rows:
+                        break
+                    if len(rows) < rows_per_page:
+                        break
+                    # 历史页通常按日期倒序，若这一页没有新增日期也可以收手。
+                    page_dates = {
+                        self._extract_history_snapshot_date(row)
+                        for row in rows
+                        if self._extract_history_snapshot_date(row)
+                    }
+                    if page_dates and page_dates.issubset(seen_dates):
+                        break
+                    seen_dates.update(page_dates)
+                return FetchResult(
+                    payload={
+                        "fund_id": fund_id,
+                        "pages": payloads,
+                    },
+                    source_url=JISILU_ETF_DETAIL_URL.format(fund_id=fund_id),
+                    meta=self.build_fetch_meta(
+                        provider="JISILU",
+                        biz_date="",
+                        fetched_at=now_text(),
+                        params={
+                            "fund_id": fund_id,
+                            "rows_per_page": rows_per_page,
+                            "max_pages": max_pages,
+                        },
+                        page_info={
+                            "pages": len(payloads),
+                            "rows": sum(len((p.get("rows", []) or [])) for p in payloads),
+                        },
+                        raw_sample=payloads[0] if payloads else None,
+                        extra={"mode": "detail_hists"},
+                    ),
+                )
+            except RuntimeError as exc:
+                if refreshed or "Jisilu tourist limited" not in str(exc):
+                    raise
+                self._refresh_cookie_from_webhook()
+                refreshed = True
+
+    @staticmethod
+    def _extract_history_snapshot_date(row: Dict[str, Any]) -> str:
+        cell = row.get("cell", row) if isinstance(row, dict) else {}
+        for key in ("snapshot_date", "date", "trade_date", "price_dt", "nav_dt"):
+            value = cell.get(key)
+            if value not in (None, ""):
+                return str(value).strip()
+        return ""

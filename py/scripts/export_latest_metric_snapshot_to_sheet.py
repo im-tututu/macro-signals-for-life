@@ -66,9 +66,9 @@ def build_parser(cfg: AppConfig) -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--content",
-        choices=("metric", "investment", "invest_bucket"),
+        choices=("metric", "investment", "invest_bucket", "pivot_history"),
         default="metric",
-        help="导出内容类型。默认 metric；investment 会导出日期+工具快照；invest_bucket 会导出投资侧归桶结果与规则表。",
+        help="导出内容类型。默认 metric；investment 会导出日期+工具快照；invest_bucket 会导出投资侧归桶结果与规则表；pivot_history 会导出历史透视表。",
     )
     parser.add_argument(
         "--env-file",
@@ -314,6 +314,41 @@ def fetch_invest_bucket_rule_rows(conn: sqlite3.Connection) -> list[list[object]
             updated_at
         FROM map_invest_exposure_bucket
         ORDER BY exposure_key
+        """
+    )
+    rows = [headers]
+    rows.extend([list(row) for row in cur.fetchall()])
+    return rows
+
+
+def fetch_invest_pivot_history_rows(conn: sqlite3.Connection) -> list[list[object]]:
+    headers = [
+        "snapshot_date",
+        "nav_dt",
+        "exposure_key",
+        "exposure_name",
+        "asset_class",
+        "source_kind",
+        "total_amount_wan",
+        "total_unit_amount_yi",
+        "total_volume_wan",
+        "etf_count",
+    ]
+    cur = conn.execute(
+        """
+        SELECT
+            snapshot_date,
+            nav_dt,
+            exposure_key,
+            exposure_name,
+            asset_class,
+            source_kind,
+            total_amount_wan,
+            total_unit_amount_yi,
+            total_volume_wan,
+            etf_count
+        FROM vw_invest_pivot_history
+        ORDER BY nav_dt DESC, snapshot_date DESC, exposure_key
         """
     )
     rows = [headers]
@@ -583,6 +618,33 @@ def export_latest_snapshot_to_sheet(
         return {
             "db_path": str(db_path),
             "as_of_date": resolved_as_of_date,
+            "worksheet_title": resolved_worksheet_title,
+            "spreadsheet_id": writer.spreadsheet_id,
+            "data_row_count": data_row_count,
+            "content": content,
+        }
+
+    if content == "pivot_history":
+        log(f"[INFO] 使用数据库: {db_path}")
+        log("[INFO] 正在读取历史透视表...")
+        conn = connect_investment_db(db_path)
+        try:
+            rows = fetch_invest_pivot_history_rows(conn)
+        finally:
+            conn.close()
+
+        resolved_worksheet_title = worksheet or "投资侧_历史透视"
+        data_row_count = max(len(rows) - 1, 0)
+        log(f"[INFO] 已读取 {data_row_count} 行，目标工作表: {resolved_worksheet_title}")
+        writer = GoogleSheetsWriter(
+            credentials_path=creds,
+            spreadsheet_id=spreadsheet_id,
+            env_file=env_file,
+        )
+        writer.replace_all(resolved_worksheet_title, rows)
+        log("[INFO] 历史透视表写入完成")
+        return {
+            "db_path": str(db_path),
             "worksheet_title": resolved_worksheet_title,
             "spreadsheet_id": writer.spreadsheet_id,
             "data_row_count": data_row_count,

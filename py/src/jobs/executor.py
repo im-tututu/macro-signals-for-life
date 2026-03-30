@@ -14,6 +14,8 @@ from .ingest import (
     fetch_cnindex_bond_index,
     fetch_csindex_bond_index,
     fetch_latest_etf_snapshot,
+    fetch_latest_jisilu_gold_snapshot,
+    fetch_latest_jisilu_money_snapshot,
     fetch_latest_alpha_vantage,
     fetch_latest_futures,
     fetch_latest_fred,
@@ -50,6 +52,8 @@ ExecutorHandler = Callable[["ExecutionContext"], list[dict[str, object]]]
 
 SIMPLE_LATEST_HANDLERS: dict[str, SimpleLatestHandler] = {
     "money_market": fetch_latest_money_market,
+    "jisilu_gold": fetch_latest_jisilu_gold_snapshot,
+    "jisilu_money": fetch_latest_jisilu_money_snapshot,
     "policy_rate": fetch_latest_policy_rate,
     "futures": fetch_latest_futures,
     "fred": fetch_latest_fred,
@@ -61,6 +65,7 @@ SIMPLE_LATEST_HANDLERS: dict[str, SimpleLatestHandler] = {
 class ExecutionContext:
     spec: DailyJobSpec
     dry_run: bool
+    force: bool
     db_path: Path | None
     date: str | None
     limit: int
@@ -192,6 +197,7 @@ def _run_policy_rate_recent_job(ctx: ExecutionContext) -> list[dict[str, object]
 def _run_etf_snapshot_job(ctx: ExecutionContext) -> list[dict[str, object]]:
     stats = fetch_latest_etf_snapshot(
         dry_run=ctx.dry_run,
+        force=ctx.force,
         db_path=ctx.db_path,
         snapshot_date=ctx.snapshot_date,
         rows_per_page=ctx.rows_per_page,
@@ -203,6 +209,7 @@ def _run_etf_snapshot_job(ctx: ExecutionContext) -> list[dict[str, object]]:
 def _run_qdii_snapshot_job(ctx: ExecutionContext) -> list[dict[str, object]]:
     stats = fetch_latest_qdii_snapshot(
         dry_run=ctx.dry_run,
+        force=ctx.force,
         db_path=ctx.db_path,
         snapshot_date=ctx.snapshot_date,
         rows_per_page=ctx.rows_per_page,
@@ -214,6 +221,7 @@ def _run_qdii_snapshot_job(ctx: ExecutionContext) -> list[dict[str, object]]:
 def _run_treasury_snapshot_job(ctx: ExecutionContext) -> list[dict[str, object]]:
     stats = fetch_latest_treasury_snapshot(
         dry_run=ctx.dry_run,
+        force=ctx.force,
         db_path=ctx.db_path,
         snapshot_date=ctx.snapshot_date,
     )
@@ -274,6 +282,7 @@ def execute_daily_job(
     job_name: str,
     *,
     dry_run: bool = False,
+    force: bool = False,
     db_path: Path | None = None,
     date: str | None = None,
     limit: int = 20,
@@ -295,6 +304,7 @@ def execute_daily_job(
     ctx = ExecutionContext(
         spec=spec,
         dry_run=dry_run,
+        force=force,
         db_path=db_path,
         date=date,
         limit=limit,

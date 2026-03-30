@@ -100,6 +100,40 @@ class JisiluEtfSnapshot:
 
 
 @dataclass(slots=True)
+class JisiluGoldRowSnapshot:
+    fund_id: str
+    cell: Dict[str, Any]
+    raw_row: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class JisiluGoldSnapshot:
+    snapshot_date: str
+    fetched_at: str
+    source_url: str
+    records_total: Any
+    rows: List[JisiluGoldRowSnapshot]
+    meta: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class JisiluMoneyRowSnapshot:
+    fund_id: str
+    cell: Dict[str, Any]
+    raw_row: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class JisiluMoneySnapshot:
+    snapshot_date: str
+    fetched_at: str
+    source_url: str
+    records_total: Any
+    rows: List[JisiluMoneyRowSnapshot]
+    meta: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
 class JisiluQdiiRowSnapshot:
     market: str
     market_code: str

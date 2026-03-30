@@ -13,6 +13,8 @@ from .ingest import (
     fetch_latest_alpha_vantage,
     fetch_latest_bond_curve,
     fetch_latest_etf_snapshot,
+    fetch_latest_jisilu_gold_snapshot,
+    fetch_latest_jisilu_money_snapshot,
     fetch_latest_futures,
     fetch_latest_fred,
     fetch_latest_money_market,
@@ -24,6 +26,8 @@ from .ingest import (
 __all__ = [
     "run_daily_fetcher",
     "fetch_latest_money_market",
+    "fetch_latest_jisilu_gold_snapshot",
+    "fetch_latest_jisilu_money_snapshot",
     "fetch_bond_curve_for_date",
     "fetch_latest_bond_curve",
     "fetch_latest_fred",

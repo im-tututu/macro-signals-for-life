@@ -22,7 +22,7 @@ from .chinamoney import ChinaMoneySource
 from .cnindex import CnindexBondSource
 from .csindex import CsindexBondSource
 from .fred import FredSource
-from .jisilu import JisiluEtfSource, JisiluQdiiSource, JisiluTreasurySource
+from .jisilu import JisiluEtfSource, JisiluQdiiEtfSource, JisiluTreasurySource
 from .pbc import PbcSource
 from .sina_futures import SinaFuturesSource
 from .sse import SseLivelyBondSource
@@ -114,7 +114,7 @@ SOURCE_REGISTRY: dict[str, SourceSpec] = {
     "jisilu_qdii": SourceSpec(
         source_id="jisilu_qdii",
         dataset_id="qdii",
-        source_class=JisiluQdiiSource,
+        source_class=JisiluQdiiEtfSource,
         access_kind="xhr_json",
         snapshot_type=JisiluQdiiSnapshot,
         fetch_method="fetch_qdii_all_result",

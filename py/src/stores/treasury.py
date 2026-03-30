@@ -31,7 +31,7 @@ TREASURY_NUMERIC_FIELDS = (
 
 TREASURY_SPEC = TableSpec(
     table_name=TABLE_RAW_JISILU_TREASURY,
-    key_fields=("snapshot_date", "bond_id"),
+    key_fields=("snapshot_date", "fetched_at", "bond_id"),
     date_field="snapshot_date",
     numeric_fields=TREASURY_NUMERIC_FIELDS,
     integer_fields=("source_row_num",),
@@ -57,7 +57,7 @@ TREASURY_SPEC = TableSpec(
         "fetched_at",
         "migrated_at",
     ),
-    default_order_by=("snapshot_date", "bond_id"),
+    default_order_by=("snapshot_date", "fetched_at", "bond_id"),
 )
 
 

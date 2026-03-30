@@ -132,6 +132,61 @@ def fetch_latest_bond_curve(
     )
 
 
+def fetch_etf_detail_history(
+    fund_id: str,
+    *,
+    dry_run: bool = False,
+    db_path: Path | None = None,
+    rows_per_page: int = 50,
+    max_pages: int = 2,
+):
+    """抓取单只 ETF 的 detail_hists 历史明细，并补到原始 ETF 表。
+
+    这个入口适合回补近 50 天左右的历史数据。字段缺失时会留空，
+    但会尽量保留 `snapshot_date / fund_id / price / volume / amount / unit_total`
+    这些核心字段。
+    """
+
+    from src.sources.jisilu import JisiluEtfSource
+    from src.stores.etf import EtfStore
+
+    store = EtfStore(db_path=db_path)
+    source = JisiluEtfSource()
+    fetch_result = source.fetch_etf_detail_history_result(
+        fund_id=fund_id,
+        rows_per_page=rows_per_page,
+        max_pages=max_pages,
+    )
+
+    rows: list[dict[str, object]] = []
+    for page_payload in fetch_result.payload.get("pages", []):
+        for row in page_payload.get("rows", []) or []:
+            cell = row.get("cell", row) if isinstance(row, dict) else {}
+            snapshot_date = source._extract_history_snapshot_date(row)
+            if not snapshot_date:
+                continue
+            rows.append(
+                store.build_row_from_history_cell(
+                    snapshot_date=snapshot_date,
+                    fetched_at=str(fetch_result.meta.get("fetched_at") or ""),
+                    fund_id=fund_id,
+                    cell=dict(cell),
+                    source_url=fetch_result.source_url,
+                )
+            )
+
+    if not rows:
+        raise ValueError(f"ETF detail history returned no rows for fund_id={fund_id}")
+
+    return run_upsert_job(
+        store=store,
+        rows=rows,
+        job_name="daily_raw_jisilu_etf_detail_history",
+        source_type="jisilu_etf_detail_hists",
+        dry_run=dry_run,
+    )
+
+
 def fetch_latest_fred(
     *,
     dry_run: bool = False,
@@ -262,6 +317,7 @@ def fetch_latest_etf_snapshot(
     max_pages: int = 20,
     min_unit_total_yi: float | int | str = "",
     min_volume_wan: float | int | str = "",
+    force: bool = False,
 ):
     """抓取最新指数 ETF 快照并写入原始 ETF 表。"""
 
@@ -273,9 +329,6 @@ def fetch_latest_etf_snapshot(
     target_snapshot_date = snapshot_date or today_ymd()
 
     if not is_trading_day(target_snapshot_date):
-        return WriteStats(skipped=1)
-
-    if store.count_rows(snapshot_date=target_snapshot_date) > 0:
         return WriteStats(skipped=1)
 
     return run_fetch_transform_many_job(
@@ -295,6 +348,86 @@ def fetch_latest_etf_snapshot(
     )
 
 
+def fetch_latest_jisilu_gold_snapshot(
+    *,
+    dry_run: bool = False,
+    db_path: Path | None = None,
+    snapshot_date: str | None = None,
+    rows_per_page: int = 25,
+    max_pages: int = 20,
+    min_unit_total_yi: float | int | str = "",
+    min_volume_wan: float | int | str = "",
+    force: bool = False,
+):
+    """抓取最新集思录黄金列表快照并写入原始黄金表。"""
+
+    from src.sources.jisilu import JisiluGoldEtfSource
+    from src.stores.gold_etf import GoldEtfStore
+
+    store = GoldEtfStore(db_path=db_path)
+    source = JisiluGoldEtfSource()
+    target_snapshot_date = snapshot_date or today_ymd()
+
+    if not is_trading_day(target_snapshot_date):
+        return WriteStats(skipped=1)
+
+    return run_fetch_transform_many_job(
+        store=store,
+        fetch=lambda: source.fetch_gold_result(
+            snapshot_date=target_snapshot_date,
+            rows_per_page=rows_per_page,
+            max_pages=max_pages,
+            min_unit_total_yi=min_unit_total_yi,
+            min_volume_wan=min_volume_wan,
+        ),
+        rows_builder=store.build_rows_from_fetch_result,
+        job_name="daily_raw_jisilu_gold",
+        source_type="jisilu_gold",
+        dry_run=dry_run,
+        incremental=False,
+    )
+
+
+def fetch_latest_jisilu_money_snapshot(
+    *,
+    dry_run: bool = False,
+    db_path: Path | None = None,
+    snapshot_date: str | None = None,
+    rows_per_page: int = 25,
+    max_pages: int = 20,
+    min_unit_total_yi: float | int | str = "",
+    min_volume_wan: float | int | str = "",
+    force: bool = False,
+):
+    """抓取最新集思录货币列表快照并写入原始货币表。"""
+
+    from src.sources.jisilu import JisiluMoneyEtfSource
+    from src.stores.money_etf import MoneyEtfStore
+
+    store = MoneyEtfStore(db_path=db_path)
+    source = JisiluMoneyEtfSource()
+    target_snapshot_date = snapshot_date or today_ymd()
+
+    if not is_trading_day(target_snapshot_date):
+        return WriteStats(skipped=1)
+
+    return run_fetch_transform_many_job(
+        store=store,
+        fetch=lambda: source.fetch_money_result(
+            snapshot_date=target_snapshot_date,
+            rows_per_page=rows_per_page,
+            max_pages=max_pages,
+            min_unit_total_yi=min_unit_total_yi,
+            min_volume_wan=min_volume_wan,
+        ),
+        rows_builder=store.build_rows_from_fetch_result,
+        job_name="daily_raw_jisilu_money",
+        source_type="jisilu_money",
+        dry_run=dry_run,
+        incremental=False,
+    )
+
+
 def fetch_latest_qdii_snapshot(
     *,
     dry_run: bool = False,
@@ -302,14 +435,15 @@ def fetch_latest_qdii_snapshot(
     snapshot_date: str | None = None,
     rows_per_page: int = 50,
     max_pages: int = 20,
+    force: bool = False,
 ):
     """抓取最新 QDII 分市场快照并写入原始 QDII 表。"""
 
-    from src.sources.jisilu import JisiluQdiiSource
-    from src.stores.qdii import QdiiStore
+    from src.sources.jisilu import JisiluQdiiEtfSource
+    from src.stores.qdii_etf import QdiiEtfStore
 
-    store = QdiiStore(db_path=db_path)
-    source = JisiluQdiiSource()
+    store = QdiiEtfStore(db_path=db_path)
+    source = JisiluQdiiEtfSource()
     target_snapshot_date = snapshot_date or today_ymd()
 
     if not is_trading_day(target_snapshot_date):
@@ -318,9 +452,6 @@ def fetch_latest_qdii_snapshot(
     markets = ("europe_america", "commodity", "asia")
     stats_total = WriteStats()
     for market in markets:
-        if store.count_rows(snapshot_date=target_snapshot_date, market=market) > 0:
-            stats_total.skipped += 1
-            continue
         stats = run_fetch_transform_many_job(
             store=store,
             fetch=lambda market=market: source.fetch_qdii_all_result(
@@ -344,6 +475,7 @@ def fetch_latest_treasury_snapshot(
     dry_run: bool = False,
     db_path: Path | None = None,
     snapshot_date: str | None = None,
+    force: bool = False,
 ):
     """抓取最新国债现券全量表格并写入原始国债表。"""
 
@@ -355,9 +487,6 @@ def fetch_latest_treasury_snapshot(
     target_snapshot_date = snapshot_date or today_ymd()
 
     if not is_trading_day(target_snapshot_date):
-        return WriteStats(skipped=1)
-
-    if store.count_rows(snapshot_date=target_snapshot_date) > 0:
         return WriteStats(skipped=1)
 
     return run_fetch_transform_many_job(

@@ -197,7 +197,7 @@ def build_etf_match_map(conn: sqlite3.Connection, anchor_date: str) -> dict[str,
         rows = conn.execute(
             """
             SELECT fund_id, display_name, index_nm
-            FROM vw_qdii_snapshot_enriched
+            FROM vw_qdii_enriched
             WHERE snapshot_date = ?
             """,
             (qdii_date,),
@@ -505,7 +505,7 @@ def build_investment_underlying_rows(
             conn,
             """
             SELECT DISTINCT snapshot_date, market, index_nm, money_cd
-            FROM vw_qdii_snapshot_enriched
+            FROM vw_qdii_enriched
             WHERE snapshot_date = ? AND COALESCE(index_nm, '') <> ''
             ORDER BY market, index_nm
             """,
@@ -526,7 +526,7 @@ def build_investment_underlying_rows(
                     asset_bucket="投资标的物",
                     asset_type="商品标的" if asset_family == "商品" else "海外标的",
                     provider="集思录QDII",
-                    source_table="vw_qdii_snapshot_enriched",
+                    source_table="vw_qdii_enriched",
                     category_l1=asset_family,
                     category_l2=category,
                     invest_region=infer_region(name, currency, str(row["market"] or "")),

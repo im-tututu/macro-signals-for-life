@@ -15,6 +15,18 @@ def fetch_latest_money_market(*args, **kwargs):
     return _fetch_latest_money_market(*args, **kwargs)
 
 
+def fetch_latest_jisilu_gold_snapshot(*args, **kwargs):
+    from .ingest import fetch_latest_jisilu_gold_snapshot as _fetch_latest_jisilu_gold_snapshot
+
+    return _fetch_latest_jisilu_gold_snapshot(*args, **kwargs)
+
+
+def fetch_latest_jisilu_money_snapshot(*args, **kwargs):
+    from .ingest import fetch_latest_jisilu_money_snapshot as _fetch_latest_jisilu_money_snapshot
+
+    return _fetch_latest_jisilu_money_snapshot(*args, **kwargs)
+
+
 def fetch_bond_curve_for_date(*args, **kwargs):
     from .ingest import fetch_bond_curve_for_date as _fetch_bond_curve_for_date
 
@@ -69,6 +81,12 @@ def fetch_latest_etf_snapshot(*args, **kwargs):
     return _fetch_latest_etf_snapshot(*args, **kwargs)
 
 
+def fetch_etf_detail_history(*args, **kwargs):
+    from .ingest import fetch_etf_detail_history as _fetch_etf_detail_history
+
+    return _fetch_etf_detail_history(*args, **kwargs)
+
+
 def fetch_latest_qdii_snapshot(*args, **kwargs):
     from .ingest import fetch_latest_qdii_snapshot as _fetch_latest_qdii_snapshot
 
@@ -107,6 +125,8 @@ def fetch_cnindex_bond_index(*args, **kwargs):
 __all__ = [
     "run_daily_fetcher",
     "fetch_latest_money_market",
+    "fetch_latest_jisilu_gold_snapshot",
+    "fetch_latest_jisilu_money_snapshot",
     "fetch_bond_curve_for_date",
     "fetch_latest_bond_curve",
     "fetch_latest_chinabond_curve",
@@ -116,6 +136,7 @@ __all__ = [
     "fetch_latest_policy_rate",
     "fetch_latest_futures",
     "fetch_latest_etf_snapshot",
+    "fetch_etf_detail_history",
     "fetch_latest_qdii_snapshot",
     "fetch_latest_treasury_snapshot",
     "fetch_latest_sse_lively_bond_snapshot",

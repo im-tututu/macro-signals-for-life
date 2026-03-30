@@ -444,21 +444,43 @@ WHERE bucket_id IN ('eq_cn_large_cap', 'eq_cn_growth');
 
 DROP VIEW IF EXISTS vw_invest_instrument_latest;
 CREATE VIEW vw_invest_instrument_latest AS
-WITH latest_etf AS (
-    SELECT MAX(snapshot_date) AS snapshot_date
+WITH latest_etf_date AS (
+    SELECT MAX(COALESCE(NULLIF(TRIM(nav_dt), ''), snapshot_date)) AS nav_dt
     FROM raw_jisilu_etf
+    WHERE COALESCE(NULLIF(TRIM(nav_dt), ''), '') <> ''
 ),
-latest_qdii AS (
-    SELECT MAX(snapshot_date) AS snapshot_date
+latest_etf_batch AS (
+    SELECT snapshot_date, MAX(fetched_at) AS fetched_at
+    FROM raw_jisilu_etf
+    WHERE COALESCE(NULLIF(TRIM(nav_dt), ''), '') <> ''
+      AND COALESCE(NULLIF(TRIM(nav_dt), ''), snapshot_date) = (SELECT nav_dt FROM latest_etf_date)
+    GROUP BY snapshot_date
+),
+latest_qdii_date AS (
+    SELECT MAX(COALESCE(NULLIF(TRIM(nav_dt), ''), snapshot_date)) AS nav_dt
     FROM raw_jisilu_qdii
+    WHERE COALESCE(NULLIF(TRIM(nav_dt), ''), '') <> ''
+),
+latest_qdii_batch AS (
+    SELECT snapshot_date, market, MAX(fetched_at) AS fetched_at
+    FROM raw_jisilu_qdii
+    WHERE COALESCE(NULLIF(TRIM(nav_dt), ''), '') <> ''
+      AND COALESCE(NULLIF(TRIM(nav_dt), ''), snapshot_date) = (SELECT nav_dt FROM latest_qdii_date)
+    GROUP BY snapshot_date, market
 ),
 latest_lively_bond AS (
     SELECT MAX(trade_date) AS trade_date
     FROM raw_sse_lively_bond
 ),
-latest_treasury AS (
+latest_treasury_date AS (
     SELECT MAX(snapshot_date) AS snapshot_date
     FROM raw_jisilu_treasury
+),
+latest_treasury_batch AS (
+    SELECT snapshot_date, MAX(fetched_at) AS fetched_at
+    FROM raw_jisilu_treasury
+    WHERE snapshot_date = (SELECT snapshot_date FROM latest_treasury_date)
+    GROUP BY snapshot_date
 ),
 lively_bond_enriched AS (
     SELECT
@@ -469,6 +491,7 @@ lively_bond_enriched AS (
         NULL AS issuer_name,
         'raw_sse_lively_bond+raw_jisilu_treasury' AS source_table,
         s.trade_date AS snapshot_date,
+        s.trade_date AS nav_dt,
         COALESCE(t.full_price, s.close_price) AS price,
         s.amount_wanyuan / 10000.0 AS amount_yi,
         s.volume_hand AS volume_wan,
@@ -482,7 +505,10 @@ lively_bond_enriched AS (
     FROM raw_sse_lively_bond AS s
     LEFT JOIN raw_jisilu_treasury AS t
         ON s.bond_id = t.bond_id
-       AND t.snapshot_date = (SELECT snapshot_date FROM latest_treasury)
+       AND (t.snapshot_date, t.fetched_at) IN (
+            SELECT snapshot_date, fetched_at
+            FROM latest_treasury_batch
+       )
     WHERE s.trade_date = (SELECT trade_date FROM latest_lively_bond)
 )
 SELECT
@@ -492,10 +518,22 @@ SELECT
         ELSE 'etf'
     END AS instrument_type,
     fund_id AS instrument_code,
-    fund_nm AS instrument_name,
+    COALESCE(
+        NULLIF(fund_nm, ''),
+        (
+            SELECT NULLIF(TRIM(r.fund_nm), '')
+            FROM raw_jisilu_etf AS r
+            WHERE r.fund_id = raw_jisilu_etf.fund_id
+              AND NULLIF(TRIM(r.fund_nm), '') IS NOT NULL
+            ORDER BY COALESCE(NULLIF(TRIM(r.nav_dt), ''), r.snapshot_date) DESC, r.snapshot_date DESC, r.fetched_at DESC
+            LIMIT 1
+        ),
+        fund_id
+    ) AS instrument_name,
     issuer_nm AS issuer_name,
     'raw_jisilu_etf' AS source_table,
     snapshot_date,
+    COALESCE(NULLIF(TRIM(nav_dt), ''), snapshot_date) AS nav_dt,
     price,
     amount_yi,
     volume_wan,
@@ -507,7 +545,11 @@ SELECT
     NULL AS ytm,
     index_nm AS raw_exposure_name
 FROM raw_jisilu_etf
-WHERE snapshot_date = (SELECT snapshot_date FROM latest_etf)
+WHERE COALESCE(NULLIF(TRIM(nav_dt), ''), '') <> ''
+  AND (snapshot_date, fetched_at) IN (
+    SELECT snapshot_date, fetched_at
+    FROM latest_etf_batch
+  )
 
 UNION ALL
 
@@ -515,10 +557,23 @@ SELECT
     'qdii_' || fund_id AS instrument_id,
     'qdii' AS instrument_type,
     fund_id AS instrument_code,
-    COALESCE(NULLIF(fund_nm_display, ''), fund_nm) AS instrument_name,
+    COALESCE(
+        NULLIF(fund_nm_display, ''),
+        NULLIF(fund_nm, ''),
+        (
+            SELECT COALESCE(NULLIF(r.fund_nm_display, ''), NULLIF(r.fund_nm, ''))
+            FROM raw_jisilu_qdii AS r
+            WHERE r.fund_id = raw_jisilu_qdii.fund_id
+              AND COALESCE(NULLIF(r.fund_nm_display, ''), NULLIF(r.fund_nm, '')) IS NOT NULL
+            ORDER BY COALESCE(NULLIF(TRIM(r.nav_dt), ''), r.snapshot_date) DESC, r.snapshot_date DESC, r.fetched_at DESC
+            LIMIT 1
+        ),
+        fund_id
+    ) AS instrument_name,
     issuer_nm AS issuer_name,
     'raw_jisilu_qdii' AS source_table,
     snapshot_date,
+    COALESCE(NULLIF(TRIM(nav_dt), ''), snapshot_date) AS nav_dt,
     price,
     amount_yi,
     volume_wan,
@@ -530,7 +585,11 @@ SELECT
     NULL AS ytm,
     index_nm AS raw_exposure_name
 FROM raw_jisilu_qdii
-WHERE snapshot_date = (SELECT snapshot_date FROM latest_qdii)
+WHERE COALESCE(NULLIF(TRIM(nav_dt), ''), '') <> ''
+  AND (snapshot_date, fetched_at, market) IN (
+    SELECT snapshot_date, fetched_at, market
+    FROM latest_qdii_batch
+  )
 
 UNION ALL
 
@@ -542,6 +601,7 @@ SELECT
     issuer_name,
     source_table,
     snapshot_date,
+    nav_dt,
     price,
     amount_yi,
     volume_wan,
@@ -564,6 +624,7 @@ SELECT
     i.issuer_name,
     i.source_table,
     i.snapshot_date,
+    i.nav_dt,
     i.price,
     i.amount_yi,
     i.volume_wan,
@@ -670,6 +731,7 @@ SELECT
     e.issuer_name,
     e.source_table,
     e.snapshot_date,
+    e.nav_dt,
     e.price,
     e.amount_yi,
     e.volume_wan,
