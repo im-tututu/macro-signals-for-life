@@ -269,18 +269,47 @@ def _load_target_dates(conn: Any, *, end_date: str) -> list[str]:
     return [str(row["date"] or "") for row in rows if str(row["date"] or "").strip()]
 
 
+def _table_has_column(conn: Any, table: str, column: str) -> bool:
+    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    return any(str(row["name"] or row[1] or "") == column for row in rows)
+
+
 def _load_observed_series(conn: Any, spec: SourceMetricSpec, *, end_date: str) -> dict[str, float]:
-    rows = conn.execute(
-        f"""
-        SELECT date, {spec.value_sql} AS value
-        FROM {spec.table}
-        WHERE {spec.key_sql}
-          AND date <= ?
-          AND {spec.value_sql} IS NOT NULL
-        ORDER BY date ASC
-        """,
-        (end_date,),
-    ).fetchall()
+    if _table_has_column(conn, spec.table, "fetched_at"):
+        rows = conn.execute(
+            f"""
+            WITH latest_batch AS (
+                SELECT date, MAX(fetched_at) AS fetched_at
+                FROM {spec.table}
+                WHERE ({spec.key_sql})
+                  AND date <= ?
+                  AND {spec.value_sql} IS NOT NULL
+                GROUP BY date
+            )
+            SELECT t.date, t.{spec.value_sql} AS value
+            FROM {spec.table} AS t
+            JOIN latest_batch AS b
+              ON t.date = b.date
+             AND t.fetched_at = b.fetched_at
+            WHERE ({spec.key_sql})
+              AND t.date <= ?
+              AND t.{spec.value_sql} IS NOT NULL
+            ORDER BY t.date ASC
+            """,
+            (end_date, end_date),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            f"""
+            SELECT date, {spec.value_sql} AS value
+            FROM {spec.table}
+            WHERE {spec.key_sql}
+              AND date <= ?
+              AND {spec.value_sql} IS NOT NULL
+            ORDER BY date ASC
+            """,
+            (end_date,),
+        ).fetchall()
     out: dict[str, float] = {}
     for row in rows:
         date_value = str(row["date"] or "").strip()
