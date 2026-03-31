@@ -13,6 +13,7 @@ set -euo pipefail
 #   bash tools/local/sync_remote.sh --db-push
 #   bash tools/local/sync_remote.sh --db-pull
 #   bash tools/local/sync_remote.sh --db-pull --no-env
+#   bash tools/local/sync_remote.sh --google-creds-only
 #
 # Optional env overrides:
 #   ENV_FILE=.env
@@ -96,6 +97,7 @@ DRY_RUN=0
 SYNC_ENV=1
 SYNC_GOOGLE_CREDS=1
 DB_MODE="none" # none | push | pull
+GOOGLE_CREDS_ONLY=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -114,6 +116,13 @@ while [[ $# -gt 0 ]]; do
       ;;
     --no-google-creds)
       SYNC_GOOGLE_CREDS=0
+      shift
+      ;;
+    --google-creds-only)
+      GOOGLE_CREDS_ONLY=1
+      SYNC_ENV=0
+      SYNC_GOOGLE_CREDS=1
+      DB_MODE="none"
       shift
       ;;
     --db-push)
@@ -140,8 +149,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ "$SYNC_ENV" -eq 0 && "$DB_MODE" == "none" ]]; then
-  echo "[ERR] Nothing to sync. Use default / --env-only / --db-push / --db-pull." >&2
+if [[ "$GOOGLE_CREDS_ONLY" -eq 0 && "$SYNC_ENV" -eq 0 && "$DB_MODE" == "none" ]]; then
+  echo "[ERR] Nothing to sync. Use default / --env-only / --db-push / --db-pull / --google-creds-only." >&2
   exit 2
 fi
 
@@ -153,6 +162,17 @@ fi
 if [[ -z "$REMOTE_DB_PATH" ]]; then
   echo "[ERR] Missing remote DB target. Please set DB_PATH or REMOTE_DB_PATH." >&2
   exit 2
+fi
+
+if [[ "$GOOGLE_CREDS_ONLY" -eq 1 ]]; then
+  if [[ -z "$LOCAL_GOOGLE_CREDENTIALS_PATH" || -z "$REMOTE_GOOGLE_CREDENTIALS_PATH" ]]; then
+    echo "[ERR] Missing Google credentials path. Please set GOOGLE_APPLICATION_CREDENTIALS in $ENV_FILE." >&2
+    exit 2
+  fi
+  if [[ ! -f "$LOCAL_GOOGLE_CREDENTIALS_PATH" ]]; then
+    echo "[ERR] Missing local Google credentials file: $LOCAL_GOOGLE_CREDENTIALS_PATH" >&2
+    exit 1
+  fi
 fi
 
 SSH_OPTS=(-p "$REMOTE_PORT")
@@ -177,6 +197,21 @@ echo "[INFO] remote_db_path=${REMOTE_DB_PATH}"
 echo "[INFO] local_google_credentials_path=${LOCAL_GOOGLE_CREDENTIALS_PATH:-<none>}"
 echo "[INFO] remote_google_credentials_path=${REMOTE_GOOGLE_CREDENTIALS_PATH:-<none>}"
 echo "[INFO] dry_run=${DRY_RUN} sync_env=${SYNC_ENV} db_mode=${DB_MODE}"
+
+if [[ "$GOOGLE_CREDS_ONLY" -eq 1 ]]; then
+  if [[ "$DRY_RUN" -eq 0 ]]; then
+    "${SSH_CMD[@]}" "mkdir -p \$(dirname ${REMOTE_GOOGLE_CREDENTIALS_PATH})"
+    "${SCP_CMD[@]}" "$LOCAL_GOOGLE_CREDENTIALS_PATH" "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_GOOGLE_CREDENTIALS_PATH}"
+    "${SSH_CMD[@]}" "chmod 600 ${REMOTE_GOOGLE_CREDENTIALS_PATH}"
+  else
+    echo "[DRY] ssh ${REMOTE_USER}@${REMOTE_HOST} 'mkdir -p \$(dirname ${REMOTE_GOOGLE_CREDENTIALS_PATH})'"
+    echo "[DRY] scp $LOCAL_GOOGLE_CREDENTIALS_PATH ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_GOOGLE_CREDENTIALS_PATH}"
+    echo "[DRY] ssh ${REMOTE_USER}@${REMOTE_HOST} 'chmod 600 ${REMOTE_GOOGLE_CREDENTIALS_PATH}'"
+  fi
+  echo "[OK] Google credentials synced"
+  echo "[DONE] sync completed"
+  exit 0
+fi
 
 if [[ "$DRY_RUN" -eq 0 ]]; then
   REMOTE_MKDIR_CMD="mkdir -p ${REMOTE_APP_DIR} && mkdir -p \$(dirname ${REMOTE_DB_PATH}) && mkdir -p ${REMOTE_APP_DIR}/runtime/logs"
