@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import traceback
 from datetime import datetime
 from pathlib import Path
 
@@ -94,63 +95,91 @@ def build_parser() -> argparse.ArgumentParser:
 def run_group(args: argparse.Namespace) -> dict[str, object]:
     jobs = JOB_GROUPS[args.group]
     results: list[dict[str, object]] = []
+    failed_jobs: list[str] = []
 
     for job_name in jobs:
-        results.extend(
-            execute_daily_job(
-                job_name,
-                dry_run=args.dry_run,
-                db_path=args.db_path,
-                limit=args.limit,
-                bond_index_ids=args.bond_index_id,
-                snapshot_date=args.snapshot_date,
-                rows_per_page=args.rows_per_page,
-                max_pages=args.max_pages,
-                source_csv=args.source_csv,
-                target_csv=args.target_csv,
+        try:
+            results.extend(
+                execute_daily_job(
+                    job_name,
+                    dry_run=args.dry_run,
+                    db_path=args.db_path,
+                    limit=args.limit,
+                    bond_index_ids=args.bond_index_id,
+                    snapshot_date=args.snapshot_date,
+                    rows_per_page=args.rows_per_page,
+                    max_pages=args.max_pages,
+                    source_csv=args.source_csv,
+                    target_csv=args.target_csv,
+                )
             )
-        )
+        except Exception as exc:  # noqa: BLE001
+            failed_jobs.append(job_name)
+            results.append(
+                {
+                    "job": job_name,
+                    "status": "failed",
+                    "table": None,
+                    "error": str(exc),
+                    "error_type": type(exc).__name__,
+                    "traceback": traceback.format_exc(),
+                }
+            )
 
     if args.group in {"cn_night", "us_morning"}:
-        sync_stats = sync_metric_daily_from_raw(
-            db_path=str(args.db_path) if args.db_path else None,
-            dry_run=args.dry_run,
-        )
-        results.append(
-            {
-                "job": "metric_daily_sync",
-                "status": "success",
-                "table": "metric_daily",
-                "stats": sync_stats,
-            }
-        )
-        snapshot_date = _resolve_latest_metric_daily_date(args.db_path)
-        snapshot_stats = _build_metric_snapshot_stats(args.db_path, snapshot_date, args.dry_run)
-        results.append(
-            {
-                "job": "metric_snapshot",
-                "status": "success",
-                "table": "metric_snapshot",
-                "stats": snapshot_stats,
-            }
-        )
-        if not args.dry_run:
-            export_stats = export_metric_snapshot_to_sheet(
-                db=args.db_path or "runtime/db/app.sqlite",
-                as_of_date=snapshot_date,
+        try:
+            sync_stats = sync_metric_daily_from_raw(
+                db_path=str(args.db_path) if args.db_path else None,
+                dry_run=args.dry_run,
             )
             results.append(
                 {
-                    "job": "metric_snapshot_export",
+                    "job": "metric_daily_sync",
                     "status": "success",
-                    "table": "google_sheet",
-                    "stats": export_stats,
+                    "table": "metric_daily",
+                    "stats": sync_stats,
+                }
+            )
+            snapshot_date = _resolve_latest_metric_daily_date(args.db_path)
+            snapshot_stats = _build_metric_snapshot_stats(args.db_path, snapshot_date, args.dry_run)
+            results.append(
+                {
+                    "job": "metric_snapshot",
+                    "status": "success",
+                    "table": "metric_snapshot",
+                    "stats": snapshot_stats,
+                }
+            )
+            if not args.dry_run:
+                export_stats = export_metric_snapshot_to_sheet(
+                    db=args.db_path or "runtime/db/app.sqlite",
+                    as_of_date=snapshot_date,
+                )
+                results.append(
+                    {
+                        "job": "metric_snapshot_export",
+                        "status": "success",
+                        "table": "google_sheet",
+                        "stats": export_stats,
+                    }
+                )
+        except Exception as exc:  # noqa: BLE001
+            failed_jobs.append("metric_pipeline")
+            results.append(
+                {
+                    "job": "metric_pipeline",
+                    "status": "failed",
+                    "table": None,
+                    "error": str(exc),
+                    "error_type": type(exc).__name__,
+                    "traceback": traceback.format_exc(),
                 }
             )
 
     return {
         "group": args.group,
         "jobs": list(jobs),
+        "failed_jobs": failed_jobs,
         "results": results,
     }
 
