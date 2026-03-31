@@ -2,12 +2,11 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import time
 from typing import Any, Dict, List
 
 from src.core.models import JisiluEtfRowSnapshot, JisiluEtfSnapshot
-from src.core.config import settings
+from src.core.config import persist_env_value, settings
 from src.core.notify import build_notifier
 from src.core.utils import now_text, today_ymd
 
@@ -97,7 +96,7 @@ class JisiluEtfSource(BaseSource):
             raise RuntimeError("refresh webhook returned empty cookie")
         self._cookie = cookie
         self._apply_cookie()
-        os.environ["JISILU_COOKIE"] = cookie
+        persist_env_value("JISILU_COOKIE", cookie)
         self._cookie_expired_notified = False
         return cookie
 

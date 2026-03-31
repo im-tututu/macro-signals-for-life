@@ -7,10 +7,10 @@ from pathlib import Path
 from src.core.config import CURVES
 from src.core.runtime import WriteStats
 from src.core.trading_calendar import load_trading_day_window
+from src.datasets.raw_queries import has_complete_chinabond_curves_for_date
 from src.datasets.registry import get_dataset_spec
 from src.jobs.ingest import fetch_bond_curve_for_date
 from src.jobs.manual import review_table
-from src.stores.bond_curves import BondCurveStore
 
 
 def _require_chinabond_curve_backfill_spec() -> None:
@@ -60,7 +60,6 @@ def backfill_chinabond_curve_window(
     attempted_dates: list[str] = []
     precheck_skipped_dates: list[str] = []
     failures: list[dict[str, str]] = []
-    store = BondCurveStore(db_path=db_path)
     expected_curves = [curve.name for curve in CURVES]
     window = load_trading_day_window(
         start_date=start_date,
@@ -73,7 +72,11 @@ def backfill_chinabond_curve_window(
         current = datetime.strptime(current_date, "%Y-%m-%d").date()
         if skip_weekends and window.csv_path is None and current.weekday() >= 5:
             continue
-        if not force_fetch and store.has_complete_curves_for_date(current_date, expected_curves=expected_curves):
+        if not force_fetch and has_complete_chinabond_curves_for_date(
+            current_date,
+            db_path=db_path,
+            expected_curves=expected_curves,
+        ):
             precheck_skipped_dates.append(current_date)
             continue
         attempted_dates.append(current_date)

@@ -318,6 +318,42 @@ def load_env_file(path: Path, *, override: bool = False) -> dict[str, str]:
     return loaded
 
 
+def _quote_env_value(value: str) -> str:
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
+
+
+def persist_env_value(key: str, value: str, *, env_file: str | Path | None = None) -> Path:
+    path = (Path(env_file).expanduser().resolve() if env_file else (REPO_ROOT / ".env").resolve())
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    rendered = f"{key}={_quote_env_value(value)}"
+    if path.exists():
+        lines = path.read_text(encoding="utf-8").splitlines()
+    else:
+        lines = []
+
+    updated = False
+    out_lines: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith(f"{key}="):
+            out_lines.append(rendered)
+            updated = True
+        else:
+            out_lines.append(line)
+
+    if not updated:
+        out_lines.append(rendered)
+
+    content = "\n".join(out_lines)
+    if out_lines:
+        content += "\n"
+    path.write_text(content, encoding="utf-8")
+    os.environ[key] = value
+    return path
+
+
 def load_local_env(*, override: bool = False, env_file: str | Path | None = None) -> Path | None:
     if env_file:
         path = Path(env_file).expanduser().resolve()

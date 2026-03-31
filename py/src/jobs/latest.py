@@ -55,10 +55,14 @@ def fetch_latest_chinabond_curve(
 
     _require_chinabond_curve_latest_spec()
 
+    from src.datasets.raw_registry import get_raw_dataset_spec
     from src.sources.chinabond import ChinaBondSource
-    from src.stores.bond_curves import BondCurveStore
+    from src.stores.raw import RawStore
 
-    store = BondCurveStore(db_path=db_path)
+    spec = get_raw_dataset_spec("chinabond_curve")
+    if spec.build_rows is None:
+        raise RuntimeError("raw dataset chinabond_curve 缺少 build_rows")
+    store = RawStore(spec.table_spec, db_path=db_path)
     source = ChinaBondSource()
 
     picked_date = _to_ymd(start_date)
@@ -73,7 +77,7 @@ def fetch_latest_chinabond_curve(
     if fetch_result is None:
         fetch_result = source.fetch_daily_wide_result(picked_date)
 
-    rows = store.build_rows_from_fetch_result(fetch_result)
+    rows = spec.build_rows(fetch_result)
     source_type = f"chinabond_yc_detail_auto:{picked_date}"
     return run_incremental_job(
         store=store,

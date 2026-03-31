@@ -5,47 +5,19 @@ from pathlib import Path
 from typing import Callable, Iterable, Sequence, TypeVar
 
 from src.core.runtime import RunContext, WriteStats
+from src.datasets.raw_registry import RAW_TABLE_REGISTRY, get_raw_spec_by_table_name
 from src.sources._base import FetchResult
 from src.stores import (
-    BondCurveStore,
-    ChinabondBondIndexStore,
-    CnindexBondIndexStore,
-    CsindexBondIndexStore,
-    EtfStore,
-    GoldEtfStore,
-    FuturesStore,
     MetricsStore,
-    MoneyMarketStore,
-    MoneyEtfStore,
-    AlphaVantageStore,
-    PolicyRateStore,
-    QdiiEtfStore,
     RunLogStore,
     SignalsStore,
-    SseLivelyBondStore,
-    TreasuryStore,
-    FredStore,
 )
 from src.stores._base import BaseSqliteStore
+from src.stores.raw import RawStore
 
 T = TypeVar("T")
 
 STORE_REGISTRY: dict[str, type[BaseSqliteStore]] = {
-    "raw_bond_curve": BondCurveStore,
-    "raw_chinabond_bond_index": ChinabondBondIndexStore,
-    "raw_csindex_bond_index": CsindexBondIndexStore,
-    "raw_cnindex_bond_index": CnindexBondIndexStore,
-    "raw_policy_rate": PolicyRateStore,
-    "raw_money_market": MoneyMarketStore,
-    "raw_fred": FredStore,
-    "raw_alpha_vantage": AlphaVantageStore,
-    "raw_futures": FuturesStore,
-    "raw_jisilu_etf": EtfStore,
-    "raw_jisilu_gold": GoldEtfStore,
-    "raw_jisilu_money": MoneyEtfStore,
-    "raw_jisilu_qdii": QdiiEtfStore,
-    "raw_jisilu_treasury": TreasuryStore,
-    "raw_sse_lively_bond": SseLivelyBondStore,
     "run_log": RunLogStore,
     "metrics": MetricsStore,
     "signal_main": SignalsStore,
@@ -53,6 +25,8 @@ STORE_REGISTRY: dict[str, type[BaseSqliteStore]] = {
 
 
 def get_store(store_name: str, db_path: Path | None = None) -> BaseSqliteStore:
+    if store_name in RAW_TABLE_REGISTRY:
+        return RawStore(get_raw_spec_by_table_name(store_name).table_spec, db_path=db_path)
     try:
         return STORE_REGISTRY[store_name](db_path=db_path)
     except KeyError as exc:

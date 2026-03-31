@@ -71,15 +71,19 @@ def fetch_latest_money_market(
 ):
     """抓取 ChinaMoney 最新资金面快照并增量写入 SQLite。"""
 
+    from src.datasets.raw_registry import get_raw_dataset_spec
     from src.sources.chinamoney import ChinaMoneySource
-    from src.stores.money_market import MoneyMarketStore
+    from src.stores.raw import RawStore
 
-    store = MoneyMarketStore(db_path=db_path)
+    spec = get_raw_dataset_spec("money_market")
+    if spec.build_row is None:
+        raise RuntimeError("raw dataset money_market 缺少 build_row")
+    store = RawStore(spec.table_spec, db_path=db_path)
     source = ChinaMoneySource()
     return run_fetch_transform_job(
         store=store,
         fetch=source.fetch_money_market,
-        row_builder=store.build_row_from_fetch_result,
+        row_builder=spec.build_row,
         job_name="daily_raw_money_market",
         source_type="chinamoney_prr_md",
         dry_run=dry_run,
@@ -98,15 +102,19 @@ def fetch_bond_curve_for_date(
 
     _require_chinabond_curve_backfill_spec()
 
+    from src.datasets.raw_registry import get_raw_dataset_spec
     from src.sources.chinabond import ChinaBondSource
-    from src.stores.bond_curves import BondCurveStore
+    from src.stores.raw import RawStore
 
-    store = BondCurveStore(db_path=db_path)
+    spec = get_raw_dataset_spec("chinabond_curve")
+    if spec.build_rows is None:
+        raise RuntimeError("raw dataset chinabond_curve 缺少 build_rows")
+    store = RawStore(spec.table_spec, db_path=db_path)
     source = ChinaBondSource()
     return run_fetch_transform_many_job(
         store=store,
         fetch=lambda: source.fetch_daily_wide_result(date),
-        rows_builder=store.build_rows_from_fetch_result,
+        rows_builder=spec.build_rows,
         job_name="daily_raw_bond_curve",
         source_type="chinabond_yc_detail",
         dry_run=dry_run,
@@ -147,10 +155,13 @@ def fetch_etf_detail_history(
     这些核心字段。
     """
 
+    from src.datasets.raw_registry import get_raw_dataset_spec
+    from src.datasets.raw_schema import build_jisilu_etf_history_row
     from src.sources.jisilu import JisiluEtfSource
-    from src.stores.etf import EtfStore
+    from src.stores.raw import RawStore
 
-    store = EtfStore(db_path=db_path)
+    spec = get_raw_dataset_spec("jisilu_etf")
+    store = RawStore(spec.table_spec, db_path=db_path)
     source = JisiluEtfSource()
     fetch_result = source.fetch_etf_detail_history_result(
         fund_id=fund_id,
@@ -166,7 +177,7 @@ def fetch_etf_detail_history(
             if not snapshot_date:
                 continue
             rows.append(
-                store.build_row_from_history_cell(
+                build_jisilu_etf_history_row(
                     snapshot_date=snapshot_date,
                     fetched_at=str(fetch_result.meta.get("fetched_at") or ""),
                     fund_id=fund_id,
@@ -194,15 +205,19 @@ def fetch_latest_fred(
 ):
     """抓取 FRED，并写入原始 FRED 表。"""
 
+    from src.datasets.raw_registry import get_raw_dataset_spec
     from src.sources.fred import FredSource
-    from src.stores.fred import FredStore
+    from src.stores.raw import RawStore
 
-    store = FredStore(db_path=db_path)
+    spec = get_raw_dataset_spec("fred")
+    if spec.build_row is None:
+        raise RuntimeError("raw dataset fred 缺少 build_row")
+    store = RawStore(spec.table_spec, db_path=db_path)
     source = FredSource()
     return run_fetch_transform_job(
         store=store,
         fetch=source.fetch_fred_result,
-        row_builder=store.build_row_from_fetch_result,
+        row_builder=spec.build_row,
         job_name="daily_raw_fred",
         source_type="fred",
         dry_run=dry_run,
@@ -218,15 +233,19 @@ def fetch_latest_alpha_vantage(
 ):
     """抓取 Alpha Vantage，并写入原始 Alpha Vantage 表。"""
 
+    from src.datasets.raw_registry import get_raw_dataset_spec
     from src.sources.alpha_vantage import AlphaVantageSource
-    from src.stores.alpha_vantage import AlphaVantageStore
+    from src.stores.raw import RawStore
 
-    store = AlphaVantageStore(db_path=db_path)
+    spec = get_raw_dataset_spec("alpha_vantage")
+    if spec.build_row is None:
+        raise RuntimeError("raw dataset alpha_vantage 缺少 build_row")
+    store = RawStore(spec.table_spec, db_path=db_path)
     source = AlphaVantageSource()
     return run_fetch_transform_job(
         store=store,
         fetch=source.fetch_alpha_vantage_result,
-        row_builder=store.build_row_from_fetch_result,
+        row_builder=spec.build_row,
         job_name="daily_raw_alpha_vantage",
         source_type="alpha_vantage",
         dry_run=dry_run,
@@ -243,15 +262,19 @@ def fetch_recent_policy_rate_events(
 ):
     """抓取近期央行政策事件并写入原始政策利率表。"""
 
+    from src.datasets.raw_registry import get_raw_dataset_spec
     from src.sources.pbc import PbcSource
-    from src.stores.policy_rates import PolicyRateStore
+    from src.stores.raw import RawStore
 
-    store = PolicyRateStore(db_path=db_path)
+    spec = get_raw_dataset_spec("policy_rate")
+    if spec.build_rows is None:
+        raise RuntimeError("raw dataset policy_rate 缺少 build_rows")
+    store = RawStore(spec.table_spec, db_path=db_path)
     source = PbcSource()
     return run_fetch_transform_many_job(
         store=store,
         fetch=lambda: source.fetch_recent_policy_rate_events_result(limit=limit),
-        rows_builder=store.build_rows_from_fetch_result,
+        rows_builder=spec.build_rows,
         job_name="daily_raw_policy_rate",
         source_type="pbc_policy_rate",
         dry_run=dry_run,
@@ -267,15 +290,19 @@ def fetch_latest_policy_rate(
 ):
     """抓取最新一组政策事件并写入原始政策利率表。"""
 
+    from src.datasets.raw_registry import get_raw_dataset_spec
     from src.sources.pbc import PbcSource
-    from src.stores.policy_rates import PolicyRateStore
+    from src.stores.raw import RawStore
 
-    store = PolicyRateStore(db_path=db_path)
+    spec = get_raw_dataset_spec("policy_rate")
+    if spec.build_rows is None:
+        raise RuntimeError("raw dataset policy_rate 缺少 build_rows")
+    store = RawStore(spec.table_spec, db_path=db_path)
     source = PbcSource()
     return run_fetch_transform_many_job(
         store=store,
         fetch=source.fetch_latest_policy_rate_events_result,
-        rows_builder=store.build_rows_from_fetch_result,
+        rows_builder=spec.build_rows,
         job_name="daily_raw_policy_rate_latest",
         source_type="pbc_policy_rate_latest",
         dry_run=dry_run,
@@ -291,15 +318,19 @@ def fetch_latest_futures(
 ):
     """抓取最新国债期货快照并写入原始期货表。"""
 
+    from src.datasets.raw_registry import get_raw_dataset_spec
     from src.sources.sina_futures import SinaFuturesSource
-    from src.stores.futures import FuturesStore
+    from src.stores.raw import RawStore
 
-    store = FuturesStore(db_path=db_path)
+    spec = get_raw_dataset_spec("futures")
+    if spec.build_row is None:
+        raise RuntimeError("raw dataset futures 缺少 build_row")
+    store = RawStore(spec.table_spec, db_path=db_path)
     source = SinaFuturesSource()
     return run_fetch_transform_job(
         store=store,
         fetch=source.fetch_bond_futures_result,
-        row_builder=store.build_row_from_fetch_result,
+        row_builder=spec.build_row,
         job_name="daily_raw_futures",
         source_type="sina_futures",
         dry_run=dry_run,
@@ -321,10 +352,13 @@ def fetch_latest_etf_snapshot(
 ):
     """抓取最新指数 ETF 快照并写入原始 ETF 表。"""
 
+    from src.datasets.raw_registry import get_raw_dataset_spec
     from src.sources.jisilu import JisiluEtfSource
-    from src.stores.etf import EtfStore
 
-    store = EtfStore(db_path=db_path)
+    spec = get_raw_dataset_spec("jisilu_etf")
+    if spec.build_rows is None:
+        raise RuntimeError("raw dataset jisilu_etf 缺少 build_rows")
+    store = get_store("raw_jisilu_etf", db_path=db_path)
     source = JisiluEtfSource()
     target_snapshot_date = snapshot_date or today_ymd()
 
@@ -340,7 +374,7 @@ def fetch_latest_etf_snapshot(
             min_unit_total_yi=min_unit_total_yi,
             min_volume_wan=min_volume_wan,
         ),
-        rows_builder=store.build_rows_from_fetch_result,
+        rows_builder=spec.build_rows,
         job_name="daily_raw_jisilu_etf",
         source_type="jisilu_etf",
         dry_run=dry_run,
@@ -361,10 +395,14 @@ def fetch_latest_jisilu_gold_snapshot(
 ):
     """抓取最新集思录黄金列表快照并写入原始黄金表。"""
 
+    from src.datasets.raw_registry import get_raw_dataset_spec
     from src.sources.jisilu import JisiluGoldEtfSource
-    from src.stores.gold_etf import GoldEtfStore
+    from src.stores.raw import RawStore
 
-    store = GoldEtfStore(db_path=db_path)
+    spec = get_raw_dataset_spec("jisilu_gold_etf")
+    if spec.build_rows is None:
+        raise RuntimeError("raw dataset jisilu_gold_etf 缺少 build_rows")
+    store = RawStore(spec.table_spec, db_path=db_path)
     source = JisiluGoldEtfSource()
     target_snapshot_date = snapshot_date or today_ymd()
 
@@ -380,7 +418,7 @@ def fetch_latest_jisilu_gold_snapshot(
             min_unit_total_yi=min_unit_total_yi,
             min_volume_wan=min_volume_wan,
         ),
-        rows_builder=store.build_rows_from_fetch_result,
+        rows_builder=spec.build_rows,
         job_name="daily_raw_jisilu_gold",
         source_type="jisilu_gold",
         dry_run=dry_run,
@@ -401,10 +439,14 @@ def fetch_latest_jisilu_money_snapshot(
 ):
     """抓取最新集思录货币列表快照并写入原始货币表。"""
 
+    from src.datasets.raw_registry import get_raw_dataset_spec
     from src.sources.jisilu import JisiluMoneyEtfSource
-    from src.stores.money_etf import MoneyEtfStore
+    from src.stores.raw import RawStore
 
-    store = MoneyEtfStore(db_path=db_path)
+    spec = get_raw_dataset_spec("jisilu_money_etf")
+    if spec.build_rows is None:
+        raise RuntimeError("raw dataset jisilu_money_etf 缺少 build_rows")
+    store = RawStore(spec.table_spec, db_path=db_path)
     source = JisiluMoneyEtfSource()
     target_snapshot_date = snapshot_date or today_ymd()
 
@@ -420,7 +462,7 @@ def fetch_latest_jisilu_money_snapshot(
             min_unit_total_yi=min_unit_total_yi,
             min_volume_wan=min_volume_wan,
         ),
-        rows_builder=store.build_rows_from_fetch_result,
+        rows_builder=spec.build_rows,
         job_name="daily_raw_jisilu_money",
         source_type="jisilu_money",
         dry_run=dry_run,
@@ -439,10 +481,13 @@ def fetch_latest_qdii_snapshot(
 ):
     """抓取最新 QDII 分市场快照并写入原始 QDII 表。"""
 
+    from src.datasets.raw_registry import get_raw_dataset_spec
     from src.sources.jisilu import JisiluQdiiEtfSource
-    from src.stores.qdii_etf import QdiiEtfStore
 
-    store = QdiiEtfStore(db_path=db_path)
+    spec = get_raw_dataset_spec("jisilu_qdii")
+    if spec.build_rows is None:
+        raise RuntimeError("raw dataset jisilu_qdii 缺少 build_rows")
+    store = get_store("raw_jisilu_qdii", db_path=db_path)
     source = JisiluQdiiEtfSource()
     target_snapshot_date = snapshot_date or today_ymd()
 
@@ -460,7 +505,7 @@ def fetch_latest_qdii_snapshot(
                 rows_per_page=rows_per_page,
                 max_pages=max_pages,
             ),
-            rows_builder=store.build_rows_from_fetch_result,
+            rows_builder=spec.build_rows,
             job_name=f"daily_raw_jisilu_qdii_{market}",
             source_type=f"jisilu_qdii:{market}",
             dry_run=dry_run,
@@ -479,10 +524,14 @@ def fetch_latest_treasury_snapshot(
 ):
     """抓取最新国债现券全量表格并写入原始国债表。"""
 
+    from src.datasets.raw_registry import get_raw_dataset_spec
     from src.sources.jisilu import JisiluTreasurySource
-    from src.stores.treasury import TreasuryStore
+    from src.stores.raw import RawStore
 
-    store = TreasuryStore(db_path=db_path)
+    spec = get_raw_dataset_spec("jisilu_treasury")
+    if spec.build_rows is None:
+        raise RuntimeError("raw dataset jisilu_treasury 缺少 build_rows")
+    store = RawStore(spec.table_spec, db_path=db_path)
     source = JisiluTreasurySource()
     target_snapshot_date = snapshot_date or today_ymd()
 
@@ -492,7 +541,7 @@ def fetch_latest_treasury_snapshot(
     return run_fetch_transform_many_job(
         store=store,
         fetch=lambda: source.fetch_treasury_result(snapshot_date=target_snapshot_date),
-        rows_builder=store.build_rows_from_fetch_result,
+        rows_builder=spec.build_rows,
         job_name="daily_raw_jisilu_treasury",
         source_type="jisilu_treasury",
         dry_run=dry_run,
@@ -509,15 +558,19 @@ def fetch_latest_sse_lively_bond_snapshot(
 ):
     """抓取上交所活跃国债榜单并写入原始表。"""
 
+    from src.datasets.raw_registry import get_raw_dataset_spec
     from src.sources.sse import SseLivelyBondSource
-    from src.stores.sse_lively_bond import SseLivelyBondStore
+    from src.stores.raw import RawStore
 
-    store = SseLivelyBondStore(db_path=db_path)
+    spec = get_raw_dataset_spec("sse_lively_bond")
+    if spec.build_rows is None:
+        raise RuntimeError("raw dataset sse_lively_bond 缺少 build_rows")
+    store = RawStore(spec.table_spec, db_path=db_path)
     source = SseLivelyBondSource()
     return run_fetch_transform_many_job(
         store=store,
         fetch=lambda: source.fetch_lively_bond_all_result(page_size=page_size, max_pages=max_pages),
-        rows_builder=store.build_rows_from_fetch_result,
+        rows_builder=spec.build_rows,
         job_name="daily_raw_sse_lively_bond",
         source_type="sse_lively_bond",
         dry_run=dry_run,
@@ -536,15 +589,19 @@ def fetch_chinabond_bond_index(
 ):
     """抓取单个中债指数特征并写入原始债券指数表。"""
 
+    from src.datasets.raw_registry import get_raw_dataset_spec
     from src.sources.chinabond import ChinaBondIndexSource
-    from src.stores.bond_index import ChinabondBondIndexStore
+    from src.stores.raw import RawStore
 
-    store = ChinabondBondIndexStore(db_path=db_path)
+    spec = get_raw_dataset_spec("chinabond_bond_index")
+    if spec.build_row is None:
+        raise RuntimeError("raw dataset chinabond_bond_index 缺少 build_row")
+    store = RawStore(spec.table_spec, db_path=db_path)
     source = ChinaBondIndexSource()
     return run_fetch_transform_job(
         store=store,
         fetch=lambda: source.fetch_duration_snapshot_result(index_id, index_name=index_name, index_code=index_code),
-        row_builder=store.build_row_from_fetch_result,
+        row_builder=spec.build_row,
         job_name="daily_raw_chinabond_bond_index",
         source_type="chinabond_index_single",
         dry_run=dry_run,
@@ -561,15 +618,19 @@ def fetch_csindex_bond_index(
     index_name: str | None = None,
     index_code: str | None = None,
 ):
+    from src.datasets.raw_registry import get_raw_dataset_spec
     from src.sources.csindex import CsindexBondSource
-    from src.stores.bond_index import CsindexBondIndexStore
+    from src.stores.raw import RawStore
 
-    store = CsindexBondIndexStore(db_path=db_path)
+    spec = get_raw_dataset_spec("csindex_bond_index")
+    if spec.build_row is None:
+        raise RuntimeError("raw dataset csindex_bond_index 缺少 build_row")
+    store = RawStore(spec.table_spec, db_path=db_path)
     source = CsindexBondSource()
     return run_fetch_transform_job(
         store=store,
         fetch=lambda: source.fetch_feature_snapshot_result(index_id, index_name=index_name, index_code=index_code),
-        row_builder=store.build_row_from_fetch_result,
+        row_builder=spec.build_row,
         job_name="daily_raw_csindex_bond_index",
         source_type="csindex_bond_feature",
         dry_run=dry_run,
@@ -586,15 +647,19 @@ def fetch_cnindex_bond_index(
     index_name: str | None = None,
     index_code: str | None = None,
 ):
+    from src.datasets.raw_registry import get_raw_dataset_spec
     from src.sources.cnindex import CnindexBondSource
-    from src.stores.bond_index import CnindexBondIndexStore
+    from src.stores.raw import RawStore
 
-    store = CnindexBondIndexStore(db_path=db_path)
+    spec = get_raw_dataset_spec("cnindex_bond_index")
+    if spec.build_row is None:
+        raise RuntimeError("raw dataset cnindex_bond_index 缺少 build_row")
+    store = RawStore(spec.table_spec, db_path=db_path)
     source = CnindexBondSource()
     return run_fetch_transform_job(
         store=store,
         fetch=lambda: source.fetch_feature_snapshot_result(index_id, index_name=index_name, index_code=index_code),
-        row_builder=store.build_row_from_fetch_result,
+        row_builder=spec.build_row,
         job_name="daily_raw_cnindex_bond_index",
         source_type="cnindex_bond_feature",
         dry_run=dry_run,

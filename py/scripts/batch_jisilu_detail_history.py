@@ -9,7 +9,7 @@ import sys
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 CURRENT_DIR = Path(__file__).resolve().parent
 PY_ROOT = CURRENT_DIR.parent
@@ -17,11 +17,14 @@ if str(PY_ROOT) not in sys.path:
     sys.path.insert(0, str(PY_ROOT))
 
 from src.core.config import AppConfig, settings
-from src.jobs import fetch_etf_detail_history
+from src.datasets.raw_registry import (
+    build_jisilu_etf_history_row,
+    build_jisilu_gold_etf_history_row,
+    build_jisilu_qdii_history_row,
+    get_raw_dataset_spec,
+)
 from src.sources.jisilu import JisiluEtfSource, JisiluQdiiEtfSource
-from src.stores.etf import EtfStore
-from src.stores.gold_etf import GoldEtfStore
-from src.stores.qdii_etf import QdiiEtfStore
+from src.stores.raw import RawStore
 
 
 CHECKPOINT_VERSION = 1
@@ -102,17 +105,6 @@ def read_fund_ids_from_file(path: Path) -> list[str]:
             continue
         items.append(text)
     return items
-
-
-def build_store_and_runner(kind: str) -> tuple[Any, Callable[..., Any], str]:
-    if kind in {"etf", "gold"}:
-        store = EtfStore() if kind == "etf" else GoldEtfStore()
-        runner = fetch_etf_detail_history
-        table_name = store.spec.table_name
-        return store, runner, table_name
-    if kind == "qdii":
-        return QdiiEtfStore(), None, QdiiEtfStore().spec.table_name
-    raise ValueError(f"unsupported kind: {kind}")
 
 
 def _extract_date(row: dict[str, Any]) -> str:
@@ -206,9 +198,8 @@ def resolve_qdii_market(
 
 def map_rows(kind: str, fund_id: str, rows: list[dict[str, Any]], fetched_at: str, source_url: str) -> list[dict[str, Any]]:
     if kind == "etf":
-        store = EtfStore()
         return [
-            store.build_row_from_history_cell(
+            build_jisilu_etf_history_row(
                 snapshot_date=_extract_date(row),
                 fetched_at=fetched_at,
                 fund_id=fund_id,
@@ -219,9 +210,8 @@ def map_rows(kind: str, fund_id: str, rows: list[dict[str, Any]], fetched_at: st
             if _extract_date(row)
         ]
     if kind == "gold":
-        store = GoldEtfStore()
         return [
-            store.build_row_from_history_cell(
+            build_jisilu_gold_etf_history_row(
                 snapshot_date=_extract_date(row),
                 fetched_at=fetched_at,
                 fund_id=fund_id,
@@ -232,9 +222,8 @@ def map_rows(kind: str, fund_id: str, rows: list[dict[str, Any]], fetched_at: st
             if _extract_date(row)
         ]
     if kind == "qdii":
-        store = QdiiEtfStore()
         return [
-            store.build_row_from_history_cell(
+            build_jisilu_qdii_history_row(
                 snapshot_date=_extract_date(row),
                 fetched_at=fetched_at,
                 market=str((row.get("cell", row) if isinstance(row, dict) else {}).get("market") or ""),
@@ -299,7 +288,11 @@ def main() -> None:
 
     done = set(checkpoint.done if args.resume else [])
     failed: list[dict[str, str]] = list(checkpoint.failed if args.resume else [])
-    store = {"etf": EtfStore(db_path=args.db_path), "gold": GoldEtfStore(db_path=args.db_path), "qdii": QdiiEtfStore(db_path=args.db_path)}[args.kind]
+    store = {
+        "etf": RawStore(get_raw_dataset_spec("jisilu_etf").table_spec, db_path=args.db_path),
+        "gold": RawStore(get_raw_dataset_spec("jisilu_gold_etf").table_spec, db_path=args.db_path),
+        "qdii": RawStore(get_raw_dataset_spec("jisilu_qdii").table_spec, db_path=args.db_path),
+    }[args.kind]
     fetched = 0
     for idx, fund_id in enumerate(fund_ids, start=1):
         if fund_id in done:

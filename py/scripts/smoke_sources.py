@@ -60,17 +60,17 @@ def main() -> None:
         payload = JisiluEtfSource().fetch_etf_index_all(max_pages=args.pages)
         print(json.dumps({"records": payload["records"], "row_count": len(payload["rows"])}, ensure_ascii=False, indent=2))
     elif args.source == "qdii":
-        from src.sources.jisilu import JisiluQdiiSource
-        from src.stores.qdii import QdiiStore
+        from src.datasets.raw_registry import build_jisilu_qdii_rows
+        from src.sources.jisilu import JisiluQdiiEtfSource
 
-        source = JisiluQdiiSource()
+        source = JisiluQdiiEtfSource()
         markets = ["europe_america", "commodity", "asia"] if args.market == "all" else [args.market]
         summaries: list[dict[str, object]] = []
         samples: dict[str, list[dict[str, object]]] = {}
         for market in markets:
             result = source.fetch_qdii_all_result(market=market, max_pages=args.pages)
             payload = result.payload
-            mapped_rows = QdiiStore.build_rows_from_fetch_result(result)
+            mapped_rows = build_jisilu_qdii_rows(result)
             summaries.append(
                 {
                     "market": payload["market"],
@@ -114,13 +114,13 @@ def main() -> None:
             )
         )
     elif args.source == "sse_lively_bond":
+        from src.datasets.raw_registry import build_sse_lively_bond_rows
         from src.sources.sse import SseLivelyBondSource
-        from src.stores.sse_lively_bond import SseLivelyBondStore
 
         source = SseLivelyBondSource()
         payload = source.fetch_lively_bond_all(page_size=args.page_size, max_pages=args.pages)
         fetch_result = source.fetch_lively_bond_all_result(page_size=args.page_size, max_pages=args.pages)
-        mapped_rows = SseLivelyBondStore.build_rows_from_fetch_result(fetch_result)
+        mapped_rows = build_sse_lively_bond_rows(fetch_result)
         print(
             json.dumps(
                 {
