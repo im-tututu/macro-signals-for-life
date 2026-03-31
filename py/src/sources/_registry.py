@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from src.core.models import (
+    AkshareBondUsSinaRow,
+    AkshareBondZhUsRateRow,
     BondIndexSnapshot,
     CurveSnapshot,
     FuturesSnapshot,
@@ -16,6 +18,7 @@ from src.core.models import (
 )
 
 from .alpha_vantage import AlphaVantageSource
+from .akshare import AkshareBondGbUsSinaSource, AkshareBondZhUsRateSource
 from ._base import AccessKind, BaseSource
 from .chinabond import ChinaBondIndexSource, ChinaBondSource
 from .chinamoney import ChinaMoneySource
@@ -150,6 +153,26 @@ SOURCE_REGISTRY: dict[str, SourceSpec] = {
         access_kind="api",
         snapshot_type=dict[str, Any],
         fetch_method="fetch_alpha_vantage_result",
+    ),
+    "akshare_bond_gb_us_sina": SourceSpec(
+        source_id="akshare_bond_gb_us_sina",
+        dataset_id="akshare_bond_gb_us_sina",
+        source_class=AkshareBondGbUsSinaSource,
+        access_kind="api",
+        snapshot_type=list[AkshareBondUsSinaRow],
+        fetch_method="fetch_history_result",
+        supports_backfill=True,
+        notes=("通过 akshare 接入新浪美国国债收益率历史行情。",),
+    ),
+    "akshare_bond_zh_us_rate": SourceSpec(
+        source_id="akshare_bond_zh_us_rate",
+        dataset_id="akshare_bond_zh_us_rate",
+        source_class=AkshareBondZhUsRateSource,
+        access_kind="api",
+        snapshot_type=list[AkshareBondZhUsRateRow],
+        fetch_method="fetch_history_result",
+        supports_backfill=True,
+        notes=("通过 akshare 接入中美收益率与 GDP 年增率对比序列。",),
     ),
 }
 

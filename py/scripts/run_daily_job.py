@@ -14,6 +14,7 @@ if str(PY_ROOT) not in sys.path:
 from src.core.trading_calendar import DEFAULT_TRADING_DAYS_CSV
 from src.jobs.executor import execute_daily_job
 from src.jobs.registry import DAILY_JOB_REGISTRY
+from src.sources.akshare import AKSHARE_BOND_GB_US_SINA_SYMBOLS
 
 
 def _build_output_payload(result: dict[str, object], args: argparse.Namespace) -> dict[str, object]:
@@ -29,6 +30,10 @@ def _build_output_payload(result: dict[str, object], args: argparse.Namespace) -
         payload["date"] = args.date
     if args.index_id:
         payload["index_id"] = args.index_id
+    if args.symbol:
+        payload["symbol"] = args.symbol
+    if args.start_date:
+        payload["start_date"] = args.start_date
     if "stats" in result:
         payload["stats"] = result["stats"]
     else:
@@ -53,6 +58,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--index-id", default=None, help="债券指数 job 使用的 index id / code。")
     parser.add_argument("--index-name", default=None, help="债券指数 job 可选 index name。")
     parser.add_argument("--index-code", default=None, help="债券指数 job 可选 index code。")
+    parser.add_argument(
+        "--symbol",
+        default=None,
+        choices=AKSHARE_BOND_GB_US_SINA_SYMBOLS,
+        help="akshare_bond_gb_us_sina 可选单一美国国债期限；不传则默认批量抓全部期限。",
+    )
+    parser.add_argument("--start-date", default=None, help="akshare_bond_zh_us_rate 可选历史起始日期，格式 YYYYMMDD。")
     parser.add_argument("--snapshot-date", default=None, help="etf 可选快照日期，格式 YYYY-MM-DD。")
     parser.add_argument("--rows-per-page", type=int, default=500, help="etf 每页抓取条数。")
     parser.add_argument("--max-pages", type=int, default=20, help="etf 最大抓取页数。")
@@ -76,6 +88,8 @@ def main() -> None:
             index_id=args.index_id,
             index_name=args.index_name,
             index_code=args.index_code,
+            start_date=args.start_date,
+            symbol=args.symbol,
             snapshot_date=args.snapshot_date,
             rows_per_page=args.rows_per_page,
             max_pages=args.max_pages,

@@ -20,6 +20,8 @@ ExecutionKey = Literal[
     "qdii_snapshot",
     "treasury_snapshot",
     "sse_lively_bond_snapshot",
+    "akshare_bond_gb_us_sina",
+    "akshare_bond_zh_us_rate",
     "trading_days_update",
 ]
 
@@ -274,6 +276,26 @@ DAILY_JOB_REGISTRY: dict[str, DailyJobSpec] = {
         suggested_schedule=US_MORNING_SCHEDULE,
         dataset_id="alpha_vantage",
         notes=("建议在北京时间早晨执行，避开商品与市场日频序列尚未稳定的窗口。",),
+    ),
+    "akshare_bond_gb_us_sina": DailyJobSpec(
+        job_name="akshare_bond_gb_us_sina",
+        source_type="akshare_bond_gb_us_sina",
+        execution_key="simple_latest",
+        cadence="daily",
+        region="US",
+        suggested_schedule=US_MORNING_SCHEDULE,
+        dataset_id="akshare_bond_gb_us_sina",
+        notes=("通过 akshare 抓新浪美国国债收益率历史行情，默认 symbol 为美国10年期国债。",),
+    ),
+    "akshare_bond_zh_us_rate": DailyJobSpec(
+        job_name="akshare_bond_zh_us_rate",
+        source_type="akshare_bond_zh_us_rate",
+        execution_key="simple_latest",
+        cadence="manual_or_periodic",
+        region="GLOBAL",
+        suggested_schedule=ANYTIME_SCHEDULE,
+        dataset_id="akshare_bond_zh_us_rate",
+        notes=("通过 akshare 抓中美国债收益率与 GDP 年增率对比序列，使用 start_date 控制历史窗口。",),
     ),
     "trading_days_update": DailyJobSpec(
         job_name="trading_days_update",

@@ -233,6 +233,38 @@ DATASET_REGISTRY: dict[str, DatasetSpec] = {
             "执行窗口更偏北京时间早晨，但这是调度信息，应留在 job registry 而不是 dataset spec。",
         ),
     ),
+    "akshare_bond_gb_us_sina": DatasetSpec(
+        dataset_id="akshare_bond_gb_us_sina",
+        source_name="AKShare Sina US Treasury",
+        table_name="raw_akshare_bond_gb_us_sina",
+        key_fields=("trade_date", "symbol"),
+        date_field="trade_date",
+        update_mode="upsert",
+        supports_latest=True,
+        latest_mode="latest_available_with_lookback",
+        supports_backfill=True,
+        backfill_mode="natural_day_range",
+        notes=(
+            "通过 akshare 接入新浪美国国债收益率历史行情，按 trade_date + symbol 去重落表。",
+            "同一 symbol 一次抓取通常返回整段历史，适合 latest 增量与按区间回补两种模式。",
+        ),
+    ),
+    "akshare_bond_zh_us_rate": DatasetSpec(
+        dataset_id="akshare_bond_zh_us_rate",
+        source_name="AKShare CN US Rate",
+        table_name="raw_akshare_bond_zh_us_rate",
+        key_fields=("trade_date",),
+        date_field="trade_date",
+        update_mode="upsert",
+        supports_latest=True,
+        latest_mode="latest_available_with_lookback",
+        supports_backfill=True,
+        backfill_mode="natural_day_range",
+        notes=(
+            "通过 akshare 接入中美国债收益率与 GDP 年增率对比序列，按 trade_date 覆盖落表。",
+            "更适合手工补历史或阶段性刷新，不建议当作高频日更任务。",
+        ),
+    ),
 }
 
 

@@ -5,6 +5,8 @@ from typing import Any, Callable, Iterable
 
 from src.core.config import (
     CURVE_VALUE_COLUMNS,
+    TABLE_RAW_AKSHARE_BOND_GB_US_SINA,
+    TABLE_RAW_AKSHARE_BOND_ZH_US_RATE,
     TABLE_RAW_ALPHA_VANTAGE,
     TABLE_RAW_BOND_CURVE,
     TABLE_RAW_CHINABOND_BOND_INDEX,
@@ -22,6 +24,8 @@ from src.core.config import (
     TABLE_RAW_SSE_LIVELY_BOND,
 )
 from src.core.models import (
+    AkshareBondUsSinaRow,
+    AkshareBondZhUsRateRow,
     BondIndexSnapshot,
     CurveSnapshot,
     FuturesSnapshot,
@@ -414,6 +418,43 @@ def _build_jisilu_qdii_contexts(fetch_result: FetchResult[JisiluQdiiSnapshot]) -
     ]
 
 
+def _build_akshare_bond_gb_us_sina_contexts(fetch_result: FetchResult[list[AkshareBondUsSinaRow]]) -> list[RowContext]:
+    fetched_at = _require_text(fetch_result.meta.get("fetched_at"), "AKShare US bond history missing fetched_at")
+    rows = _require_rows(list(fetch_result.payload or []), "AKShare US bond history rows are empty")
+    source_url = str(fetch_result.source_url or "")
+    provider = str(fetch_result.meta.get("provider") or "")
+    adapter = str(fetch_result.meta.get("adapter") or fetch_result.meta.get("params", {}).get("adapter") or "")
+    return [
+        {
+            "adapter": adapter,
+            "fetched_at": fetched_at,
+            "provider": provider,
+            "row": row,
+            "source_url": source_url,
+            "symbol": row.symbol,
+        }
+        for row in rows
+    ]
+
+
+def _build_akshare_bond_zh_us_rate_contexts(fetch_result: FetchResult[list[AkshareBondZhUsRateRow]]) -> list[RowContext]:
+    fetched_at = _require_text(fetch_result.meta.get("fetched_at"), "AKShare CN/US bond rate history missing fetched_at")
+    rows = _require_rows(list(fetch_result.payload or []), "AKShare CN/US bond rate history rows are empty")
+    source_url = str(fetch_result.source_url or "")
+    provider = str(fetch_result.meta.get("provider") or "")
+    adapter = str(fetch_result.meta.get("adapter") or fetch_result.meta.get("params", {}).get("adapter") or "")
+    return [
+        {
+            "adapter": adapter,
+            "fetched_at": fetched_at,
+            "provider": provider,
+            "row": row,
+            "source_url": source_url,
+        }
+        for row in rows
+    ]
+
+
 RAW_FRED_DEF = RawSchemaDef(
     table_name=TABLE_RAW_FRED,
     key_fields=("date",),
@@ -465,6 +506,57 @@ RAW_ALPHA_VANTAGE_DEF = RawSchemaDef(
         "fetched_at": col("datetime", "meta.fetched_at", required=True),
     },
     row_context_builder=_build_fetch_context,
+)
+
+RAW_AKSHARE_BOND_GB_US_SINA_DEF = RawSchemaDef(
+    table_name=TABLE_RAW_AKSHARE_BOND_GB_US_SINA,
+    key_fields=("trade_date", "symbol"),
+    date_field="trade_date",
+    default_order_by=("trade_date", "symbol"),
+    columns={
+        "trade_date": col("text", "row.trade_date", required=True),
+        "symbol": col("text", "row.symbol", fallbacks=("symbol",), required=True),
+        "close": col("float", "row.close"),
+        "open": col("float", "row.open"),
+        "high": col("float", "row.high"),
+        "low": col("float", "row.low"),
+        "change": col("float", "row.change"),
+        "pct_change": col("float", "row.pct_change"),
+        "volume": col("float", "row.volume"),
+        "amount": col("float", "row.amount"),
+        "provider": col("text", "provider", default=""),
+        "adapter": col("text", "adapter", default=""),
+        "source_url": col("text", "source_url", default=""),
+        "fetched_at": col("datetime", "fetched_at", required=True),
+    },
+    rows_context_builder=_build_akshare_bond_gb_us_sina_contexts,
+)
+
+RAW_AKSHARE_BOND_ZH_US_RATE_DEF = RawSchemaDef(
+    table_name=TABLE_RAW_AKSHARE_BOND_ZH_US_RATE,
+    key_fields=("trade_date",),
+    date_field="trade_date",
+    default_order_by=("trade_date",),
+    columns={
+        "trade_date": col("text", "row.trade_date", required=True),
+        "cn_2y": col("float", "row.cn_2y"),
+        "cn_5y": col("float", "row.cn_5y"),
+        "cn_10y": col("float", "row.cn_10y"),
+        "cn_30y": col("float", "row.cn_30y"),
+        "cn_10y_2y": col("float", "row.cn_10y_2y"),
+        "cn_gdp_yoy": col("float", "row.cn_gdp_yoy"),
+        "us_2y": col("float", "row.us_2y"),
+        "us_5y": col("float", "row.us_5y"),
+        "us_10y": col("float", "row.us_10y"),
+        "us_30y": col("float", "row.us_30y"),
+        "us_10y_2y": col("float", "row.us_10y_2y"),
+        "us_gdp_yoy": col("float", "row.us_gdp_yoy"),
+        "provider": col("text", "provider", default=""),
+        "adapter": col("text", "adapter", default=""),
+        "source_url": col("text", "source_url", default=""),
+        "fetched_at": col("datetime", "fetched_at", required=True),
+    },
+    rows_context_builder=_build_akshare_bond_zh_us_rate_contexts,
 )
 
 RAW_FUTURES_DEF = RawSchemaDef(

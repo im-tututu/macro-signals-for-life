@@ -257,6 +257,51 @@ CREATE TABLE IF NOT EXISTS raw_alpha_vantage (
     PRIMARY KEY (date)
 );
 
+CREATE TABLE IF NOT EXISTS raw_akshare_bond_gb_us_sina (
+    trade_date TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    close REAL,
+    open REAL,
+    high REAL,
+    low REAL,
+    change REAL,
+    pct_change REAL,
+    volume REAL,
+    amount REAL,
+    provider TEXT,
+    adapter TEXT,
+    source_url TEXT,
+    fetched_at TEXT,
+    source_sheet TEXT,
+    source_row_num INTEGER,
+    migrated_at TEXT,
+    PRIMARY KEY (trade_date, symbol)
+);
+
+CREATE TABLE IF NOT EXISTS raw_akshare_bond_zh_us_rate (
+    trade_date TEXT NOT NULL,
+    cn_2y REAL,
+    cn_5y REAL,
+    cn_10y REAL,
+    cn_30y REAL,
+    cn_10y_2y REAL,
+    cn_gdp_yoy REAL,
+    us_2y REAL,
+    us_5y REAL,
+    us_10y REAL,
+    us_30y REAL,
+    us_10y_2y REAL,
+    us_gdp_yoy REAL,
+    provider TEXT,
+    adapter TEXT,
+    source_url TEXT,
+    fetched_at TEXT,
+    source_sheet TEXT,
+    source_row_num INTEGER,
+    migrated_at TEXT,
+    PRIMARY KEY (trade_date)
+);
+
 CREATE TABLE IF NOT EXISTS raw_life_asset (
     date TEXT NOT NULL,
     mortgage_rate_est REAL,

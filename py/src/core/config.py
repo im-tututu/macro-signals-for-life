@@ -118,6 +118,8 @@ TABLE_RAW_SSE_LIVELY_BOND: Final[str] = "raw_sse_lively_bond"
 TABLE_RAW_CHINABOND_BOND_INDEX: Final[str] = "raw_chinabond_bond_index"
 TABLE_RAW_CSINDEX_BOND_INDEX: Final[str] = "raw_csindex_bond_index"
 TABLE_RAW_CNINDEX_BOND_INDEX: Final[str] = "raw_cnindex_bond_index"
+TABLE_RAW_AKSHARE_BOND_GB_US_SINA: Final[str] = "raw_akshare_bond_gb_us_sina"
+TABLE_RAW_AKSHARE_BOND_ZH_US_RATE: Final[str] = "raw_akshare_bond_zh_us_rate"
 TABLE_METRICS: Final[str] = "metrics"
 TABLE_SIGNAL_MAIN: Final[str] = "signal_main"
 TABLE_SIGNAL_DETAIL: Final[str] = "signal_detail"
@@ -142,6 +144,8 @@ RAW_TABLES: Final[list[str]] = [
     TABLE_RAW_CHINABOND_BOND_INDEX,
     TABLE_RAW_CSINDEX_BOND_INDEX,
     TABLE_RAW_CNINDEX_BOND_INDEX,
+    TABLE_RAW_AKSHARE_BOND_GB_US_SINA,
+    TABLE_RAW_AKSHARE_BOND_ZH_US_RATE,
 ]
 
 # -----------------------------

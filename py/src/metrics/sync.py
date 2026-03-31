@@ -18,6 +18,13 @@ class SourceMetricSpec:
     key_sql: str
     value_sql: str
     scale: float = 1.0
+    date_sql: str = "date"
+
+
+@dataclass(frozen=True)
+class FallbackMetricSpec:
+    code: str
+    candidates: tuple[SourceMetricSpec, ...]
 
 
 CURVE_SOURCE_SPECS: tuple[SourceMetricSpec, ...] = (
@@ -65,6 +72,39 @@ DIRECT_SOURCE_SPECS: tuple[SourceMetricSpec, ...] = (
     SourceMetricSpec("vix", "raw_fred", "1 = 1", "vix"),
     SourceMetricSpec("spx", "raw_fred", "1 = 1", "spx"),
     SourceMetricSpec("nasdaq_100", "raw_fred", "1 = 1", "nasdaq_100"),
+)
+
+UST_FALLBACK_SPECS: tuple[FallbackMetricSpec, ...] = (
+    FallbackMetricSpec(
+        code="ust_2y",
+        candidates=(
+            SourceMetricSpec("ust_2y", "raw_fred", "1 = 1", "ust_2y", 0.01),
+            SourceMetricSpec("ust_2y", "raw_akshare_bond_zh_us_rate", "1 = 1", "us_2y", 0.01, date_sql="trade_date"),
+            SourceMetricSpec(
+                "ust_2y",
+                "raw_akshare_bond_gb_us_sina",
+                "symbol = '美国2年期国债'",
+                "close",
+                0.01,
+                date_sql="trade_date",
+            ),
+        ),
+    ),
+    FallbackMetricSpec(
+        code="ust_10y",
+        candidates=(
+            SourceMetricSpec("ust_10y", "raw_fred", "1 = 1", "ust_10y", 0.01),
+            SourceMetricSpec("ust_10y", "raw_akshare_bond_zh_us_rate", "1 = 1", "us_10y", 0.01, date_sql="trade_date"),
+            SourceMetricSpec(
+                "ust_10y",
+                "raw_akshare_bond_gb_us_sina",
+                "symbol = '美国10年期国债'",
+                "close",
+                0.01,
+                date_sql="trade_date",
+            ),
+        ),
+    ),
 )
 
 RATE_COUNT_CODES: tuple[str, ...] = (
@@ -275,38 +315,39 @@ def _table_has_column(conn: Any, table: str, column: str) -> bool:
 
 
 def _load_observed_series(conn: Any, spec: SourceMetricSpec, *, end_date: str) -> dict[str, float]:
+    date_sql = spec.date_sql
     if _table_has_column(conn, spec.table, "fetched_at"):
         rows = conn.execute(
             f"""
             WITH latest_batch AS (
-                SELECT date, MAX(fetched_at) AS fetched_at
+                SELECT {date_sql} AS obs_date, MAX(fetched_at) AS fetched_at
                 FROM {spec.table}
                 WHERE ({spec.key_sql})
-                  AND date <= ?
+                  AND {date_sql} <= ?
                   AND {spec.value_sql} IS NOT NULL
-                GROUP BY date
+                GROUP BY {date_sql}
             )
-            SELECT t.date, t.{spec.value_sql} AS value
+            SELECT t.{date_sql} AS date, t.{spec.value_sql} AS value
             FROM {spec.table} AS t
             JOIN latest_batch AS b
-              ON t.date = b.date
+              ON t.{date_sql} = b.obs_date
              AND t.fetched_at = b.fetched_at
             WHERE ({spec.key_sql})
-              AND t.date <= ?
+              AND t.{date_sql} <= ?
               AND t.{spec.value_sql} IS NOT NULL
-            ORDER BY t.date ASC
+            ORDER BY t.{date_sql} ASC
             """,
             (end_date, end_date),
         ).fetchall()
     else:
         rows = conn.execute(
             f"""
-            SELECT date, {spec.value_sql} AS value
+            SELECT {date_sql} AS date, {spec.value_sql} AS value
             FROM {spec.table}
             WHERE {spec.key_sql}
-              AND date <= ?
+              AND {date_sql} <= ?
               AND {spec.value_sql} IS NOT NULL
-            ORDER BY date ASC
+            ORDER BY {date_sql} ASC
             """,
             (end_date,),
         ).fetchall()
@@ -330,6 +371,13 @@ def _forward_fill(target_dates: list[str], observed: dict[str, float]) -> dict[s
             current = observed[date_value]
         out[date_value] = current
     return out
+
+
+def _merge_observed_series(*series_list: dict[str, float]) -> dict[str, float]:
+    merged: dict[str, float] = {}
+    for series in reversed(series_list):
+        merged.update(series)
+    return merged
 
 
 def resolve_latest_metric_date(*, db_path: str | None = None) -> str:
@@ -368,6 +416,13 @@ def build_metric_daily_rows_from_raw(
         filled_by_code: dict[str, dict[str, float | None]] = {}
         for spec in CURVE_SOURCE_SPECS + DIRECT_SOURCE_SPECS:
             observed = _load_observed_series(conn, spec, end_date=target_end_date)
+            filled_by_code[spec.code] = _forward_fill(target_dates, observed)
+        for spec in UST_FALLBACK_SPECS:
+            observed_candidates = [
+                _load_observed_series(conn, candidate, end_date=target_end_date)
+                for candidate in spec.candidates
+            ]
+            observed = _merge_observed_series(*observed_candidates)
             filled_by_code[spec.code] = _forward_fill(target_dates, observed)
     finally:
         conn.close()

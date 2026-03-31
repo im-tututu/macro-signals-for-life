@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from src.datasets.raw_schema import (
+    RAW_AKSHARE_BOND_GB_US_SINA_DEF,
+    RAW_AKSHARE_BOND_ZH_US_RATE_DEF,
     RAW_ALPHA_VANTAGE_DEF,
     RAW_CHINABOND_BOND_INDEX_DEF,
     RAW_CHINABOND_CURVE_DEF,
@@ -50,6 +52,8 @@ RAW_DATASET_REGISTRY: dict[str, RawDatasetSpec] = {
     for spec in (
         RawDatasetSpec("fred", RAW_FRED_DEF),
         RawDatasetSpec("alpha_vantage", RAW_ALPHA_VANTAGE_DEF),
+        RawDatasetSpec("akshare_bond_gb_us_sina", RAW_AKSHARE_BOND_GB_US_SINA_DEF),
+        RawDatasetSpec("akshare_bond_zh_us_rate", RAW_AKSHARE_BOND_ZH_US_RATE_DEF),
         RawDatasetSpec("futures", RAW_FUTURES_DEF),
         RawDatasetSpec("money_market", RAW_MONEY_MARKET_DEF),
         RawDatasetSpec("chinabond_curve", RAW_CHINABOND_CURVE_DEF),

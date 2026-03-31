@@ -9,6 +9,8 @@ from src.core.runtime import WriteStats
 from src.core.trading_calendar import DEFAULT_TRADING_DAYS_CSV, sync_trading_days_csv
 
 from .ingest import (
+    fetch_akshare_bond_gb_us_sina,
+    fetch_akshare_bond_zh_us_rate,
     fetch_bond_curve_for_date,
     fetch_chinabond_bond_index,
     fetch_cnindex_bond_index,
@@ -58,6 +60,8 @@ SIMPLE_LATEST_HANDLERS: dict[str, SimpleLatestHandler] = {
     "futures": fetch_latest_futures,
     "fred": fetch_latest_fred,
     "alpha_vantage": fetch_latest_alpha_vantage,
+    "akshare_bond_gb_us_sina": fetch_akshare_bond_gb_us_sina,
+    "akshare_bond_zh_us_rate": fetch_akshare_bond_zh_us_rate,
 }
 
 
@@ -72,6 +76,8 @@ class ExecutionContext:
     index_id: str | None
     index_name: str | None
     index_code: str | None
+    symbol: str | None
+    start_date: str | None
     bond_index_ids: Sequence[str] | None
     snapshot_date: str | None
     rows_per_page: int
@@ -90,7 +96,12 @@ def _run_simple_latest_job(ctx: ExecutionContext) -> list[dict[str, object]]:
     """
 
     handler = SIMPLE_LATEST_HANDLERS[ctx.spec.job_name]
-    stats = handler(dry_run=ctx.dry_run, db_path=ctx.db_path)
+    kwargs: dict[str, object] = {"dry_run": ctx.dry_run, "db_path": ctx.db_path}
+    if ctx.spec.job_name == "akshare_bond_gb_us_sina":
+        kwargs["symbol"] = ctx.symbol
+    if ctx.spec.job_name == "akshare_bond_zh_us_rate" and ctx.start_date:
+        kwargs["start_date"] = ctx.start_date
+    stats = handler(**kwargs)
     return [_result(ctx.spec.job_name, status="success", table=ctx.spec.target_table, stats=_stats_payload(stats))]
 
 
@@ -290,6 +301,8 @@ def execute_daily_job(
     index_name: str | None = None,
     index_code: str | None = None,
     bond_index_ids: Sequence[str] | None = None,
+    symbol: str | None = None,
+    start_date: str | None = None,
     snapshot_date: str | None = None,
     rows_per_page: int = 500,
     max_pages: int = 20,
@@ -311,6 +324,8 @@ def execute_daily_job(
         index_id=index_id,
         index_name=index_name,
         index_code=index_code,
+        symbol=symbol,
+        start_date=start_date,
         bond_index_ids=bond_index_ids,
         snapshot_date=snapshot_date,
         rows_per_page=rows_per_page,

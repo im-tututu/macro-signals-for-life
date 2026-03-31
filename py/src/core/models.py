@@ -13,6 +13,39 @@ class Observation:
 
 
 @dataclass(slots=True)
+class AkshareBondUsSinaRow:
+    trade_date: str
+    symbol: str
+    close: Optional[float]
+    open: Optional[float] = None
+    high: Optional[float] = None
+    low: Optional[float] = None
+    change: Optional[float] = None
+    pct_change: Optional[float] = None
+    volume: Optional[float] = None
+    amount: Optional[float] = None
+    meta: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class AkshareBondZhUsRateRow:
+    trade_date: str
+    cn_2y: Optional[float] = None
+    cn_5y: Optional[float] = None
+    cn_10y: Optional[float] = None
+    cn_30y: Optional[float] = None
+    cn_10y_2y: Optional[float] = None
+    cn_gdp_yoy: Optional[float] = None
+    us_2y: Optional[float] = None
+    us_5y: Optional[float] = None
+    us_10y: Optional[float] = None
+    us_30y: Optional[float] = None
+    us_10y_2y: Optional[float] = None
+    us_gdp_yoy: Optional[float] = None
+    meta: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
 class CurveSpec:
     name: str
     id: str

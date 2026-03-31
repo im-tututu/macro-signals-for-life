@@ -57,6 +57,18 @@ def fetch_latest_alpha_vantage(*args, **kwargs):
     return _fetch_latest_alpha_vantage(*args, **kwargs)
 
 
+def fetch_akshare_bond_gb_us_sina(*args, **kwargs):
+    from .ingest import fetch_akshare_bond_gb_us_sina as _fetch_akshare_bond_gb_us_sina
+
+    return _fetch_akshare_bond_gb_us_sina(*args, **kwargs)
+
+
+def fetch_akshare_bond_zh_us_rate(*args, **kwargs):
+    from .ingest import fetch_akshare_bond_zh_us_rate as _fetch_akshare_bond_zh_us_rate
+
+    return _fetch_akshare_bond_zh_us_rate(*args, **kwargs)
+
+
 def fetch_recent_policy_rate_events(*args, **kwargs):
     from .ingest import fetch_recent_policy_rate_events as _fetch_recent_policy_rate_events
 
@@ -132,6 +144,8 @@ __all__ = [
     "fetch_latest_chinabond_curve",
     "fetch_latest_fred",
     "fetch_latest_alpha_vantage",
+    "fetch_akshare_bond_gb_us_sina",
+    "fetch_akshare_bond_zh_us_rate",
     "fetch_recent_policy_rate_events",
     "fetch_latest_policy_rate",
     "fetch_latest_futures",

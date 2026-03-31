@@ -254,6 +254,71 @@ def fetch_latest_alpha_vantage(
     )
 
 
+def fetch_akshare_bond_gb_us_sina(
+    *,
+    symbol: str | None = None,
+    dry_run: bool = False,
+    db_path: Path | None = None,
+    incremental: bool = True,
+):
+    """抓取 akshare 封装的新浪美国国债收益率历史行情。"""
+
+    from src.datasets.raw_registry import get_raw_dataset_spec
+    from src.sources.akshare import AKSHARE_BOND_GB_US_SINA_SYMBOLS, AkshareBondGbUsSinaSource
+    from src.stores.raw import RawStore
+
+    spec = get_raw_dataset_spec("akshare_bond_gb_us_sina")
+    if spec.build_rows is None:
+        raise RuntimeError("raw dataset akshare_bond_gb_us_sina 缺少 build_rows")
+    store = RawStore(spec.table_spec, db_path=db_path)
+    source = AkshareBondGbUsSinaSource()
+    return run_fetch_transform_many_job(
+        store=store,
+        fetch=(
+            (lambda: source.fetch_history_result(symbol=symbol))
+            if symbol
+            else (lambda: source.fetch_histories_result(symbols=AKSHARE_BOND_GB_US_SINA_SYMBOLS))
+        ),
+        rows_builder=spec.build_rows,
+        job_name="daily_raw_akshare_bond_gb_us_sina",
+        source_type="akshare_bond_gb_us_sina",
+        dry_run=dry_run,
+        incremental=incremental,
+        inclusive=True,
+        **({"symbol": symbol} if symbol else {}),
+    )
+
+
+def fetch_akshare_bond_zh_us_rate(
+    *,
+    start_date: str = "19901219",
+    dry_run: bool = False,
+    db_path: Path | None = None,
+    incremental: bool = True,
+):
+    """抓取 akshare 的中美国债收益率与 GDP 年增率对比历史序列。"""
+
+    from src.datasets.raw_registry import get_raw_dataset_spec
+    from src.sources.akshare import AkshareBondZhUsRateSource
+    from src.stores.raw import RawStore
+
+    spec = get_raw_dataset_spec("akshare_bond_zh_us_rate")
+    if spec.build_rows is None:
+        raise RuntimeError("raw dataset akshare_bond_zh_us_rate 缺少 build_rows")
+    store = RawStore(spec.table_spec, db_path=db_path)
+    source = AkshareBondZhUsRateSource()
+    return run_fetch_transform_many_job(
+        store=store,
+        fetch=lambda: source.fetch_history_result(start_date=start_date),
+        rows_builder=spec.build_rows,
+        job_name="daily_raw_akshare_bond_zh_us_rate",
+        source_type="akshare_bond_zh_us_rate",
+        dry_run=dry_run,
+        incremental=incremental,
+        inclusive=True,
+    )
+
+
 def fetch_recent_policy_rate_events(
     *,
     dry_run: bool = False,
