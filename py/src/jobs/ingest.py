@@ -392,14 +392,19 @@ def fetch_latest_futures(
         raise RuntimeError("raw dataset futures 缺少 build_row")
     store = RawStore(spec.table_spec, db_path=db_path)
     source = SinaFuturesSource()
-    return run_fetch_transform_job(
+    try:
+        fetch_result = source.fetch_bond_futures_result()
+    except ValueError as exc:
+        if str(exc) == "Sina futures snapshot missing all tracked prices":
+            return WriteStats(skipped=1)
+        raise
+    row = spec.build_row(fetch_result)
+    return run_incremental_job(
         store=store,
-        fetch=source.fetch_bond_futures_result,
-        row_builder=spec.build_row,
+        rows=[row],
         job_name="daily_raw_futures",
         source_type="sina_futures",
         dry_run=dry_run,
-        incremental=True,
         inclusive=True,
     )
 

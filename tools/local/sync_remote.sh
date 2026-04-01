@@ -35,6 +35,15 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 ENV_FILE="${ENV_FILE:-$REPO_ROOT/.env}"
+TMP_REMOTE_ENV=""
+
+cleanup() {
+  if [[ -n "$TMP_REMOTE_ENV" && -f "$TMP_REMOTE_ENV" ]]; then
+    rm -f "$TMP_REMOTE_ENV"
+  fi
+}
+
+trap cleanup EXIT
 
 load_env_file() {
   local file="$1"
@@ -62,6 +71,32 @@ load_env_file() {
 }
 
 load_env_file "$ENV_FILE"
+
+build_remote_env_file() {
+  local src="$1"
+  local dest="$2"
+  local remote_creds_path="$3"
+
+  if [[ -z "$remote_creds_path" ]]; then
+    cp "$src" "$dest"
+    return 0
+  fi
+
+  awk -v remote_path="$remote_creds_path" '
+    BEGIN { updated = 0 }
+    /^[[:space:]]*GOOGLE_APPLICATION_CREDENTIALS[[:space:]]*=/ {
+      print "GOOGLE_APPLICATION_CREDENTIALS=\"" remote_path "\""
+      updated = 1
+      next
+    }
+    { print }
+    END {
+      if (!updated) {
+        print "GOOGLE_APPLICATION_CREDENTIALS=\"" remote_path "\""
+      }
+    }
+  ' "$src" > "$dest"
+}
 
 REMOTE_HOST="${REMOTE_HOST:-${SERVER_HOST:-}}"
 REMOTE_PORT="${REMOTE_PORT:-${SERVER_PORT:-22}}"
@@ -228,11 +263,13 @@ if [[ "$SYNC_ENV" -eq 1 ]]; then
     echo "[ERR] Missing local env file: $LOCAL_ENV_PATH" >&2
     exit 1
   fi
+  TMP_REMOTE_ENV="$(mktemp)"
+  build_remote_env_file "$LOCAL_ENV_PATH" "$TMP_REMOTE_ENV" "$REMOTE_GOOGLE_CREDENTIALS_PATH"
   if [[ "$DRY_RUN" -eq 0 ]]; then
-    "${SCP_CMD[@]}" "$LOCAL_ENV_PATH" "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_APP_DIR}/.env"
+    "${SCP_CMD[@]}" "$TMP_REMOTE_ENV" "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_APP_DIR}/.env"
     "${SSH_CMD[@]}" "chmod 600 ${REMOTE_APP_DIR}/.env"
   else
-    echo "[DRY] scp $LOCAL_ENV_PATH ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_APP_DIR}/.env"
+    echo "[DRY] scp $TMP_REMOTE_ENV ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_APP_DIR}/.env"
     echo "[DRY] ssh ${REMOTE_USER}@${REMOTE_HOST} 'chmod 600 ${REMOTE_APP_DIR}/.env'"
   fi
   echo "[OK] .env synced"

@@ -24,7 +24,6 @@ JOB_GROUPS: dict[str, tuple[str, ...]] = {
         "money_market",
         "bond_curve",
         "policy_rate",
-        "futures",
         "etf",
         "jisilu_gold",
         "jisilu_money",
