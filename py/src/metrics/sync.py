@@ -363,6 +363,30 @@ def _load_observed_series(conn: Any, spec: SourceMetricSpec, *, end_date: str) -
     return out
 
 
+def _load_metric_daily_series(conn: Any, code: str, *, end_date: str) -> dict[str, float]:
+    rows = conn.execute(
+        """
+        SELECT date, value
+        FROM metric_daily
+        WHERE code = ?
+          AND date <= ?
+          AND value IS NOT NULL
+        ORDER BY date ASC
+        """,
+        (code, end_date),
+    ).fetchall()
+    out: dict[str, float] = {}
+    for row in rows:
+        date_value = str(row["date"] or "").strip()
+        if not date_value:
+            continue
+        try:
+            out[date_value] = float(row["value"])
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
 def _forward_fill(target_dates: list[str], observed: dict[str, float]) -> dict[str, float | None]:
     out: dict[str, float | None] = {}
     current: float | None = None
@@ -415,14 +439,20 @@ def build_metric_daily_rows_from_raw(
 
         filled_by_code: dict[str, dict[str, float | None]] = {}
         for spec in CURVE_SOURCE_SPECS + DIRECT_SOURCE_SPECS:
-            observed = _load_observed_series(conn, spec, end_date=target_end_date)
+            observed = _merge_observed_series(
+                _load_observed_series(conn, spec, end_date=target_end_date),
+                _load_metric_daily_series(conn, spec.code, end_date=target_end_date),
+            )
             filled_by_code[spec.code] = _forward_fill(target_dates, observed)
         for spec in UST_FALLBACK_SPECS:
             observed_candidates = [
                 _load_observed_series(conn, candidate, end_date=target_end_date)
                 for candidate in spec.candidates
             ]
-            observed = _merge_observed_series(*observed_candidates)
+            observed = _merge_observed_series(
+                *observed_candidates,
+                _load_metric_daily_series(conn, spec.code, end_date=target_end_date),
+            )
             filled_by_code[spec.code] = _forward_fill(target_dates, observed)
     finally:
         conn.close()
