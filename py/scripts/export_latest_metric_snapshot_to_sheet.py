@@ -511,6 +511,11 @@ def export_metric_snapshot_to_sheet(
     worksheet: str | None = None,
     env_file: str | None = None,
 ) -> dict[str, object]:
+    resolved_spreadsheet_id = (
+        spreadsheet_id
+        or getenv_first("GOOGLE_SPREADSHEET_ID_SNAPSHOT")
+        or getenv_first("GOOGLE_SPREADSHEET_ID")
+    )
     db_path = Path(db).expanduser()
     if not db_path.exists():
         raise FileNotFoundError(f"Database not found: {db_path}")
@@ -531,7 +536,7 @@ def export_metric_snapshot_to_sheet(
 
     data_row_count = max(len(rows) - 1, 0)
     log(f"[INFO] 已读取 {data_row_count} 行，目标工作表: {resolved_worksheet_title}")
-    log(f"[INFO] 目标 spreadsheet_id: {spreadsheet_id}")
+    log(f"[INFO] 目标 spreadsheet_id: {resolved_spreadsheet_id}")
     log(f"[INFO] 目标 credentials: {creds}")
     log("[INFO] 正在加载 Google Sheets 模块...")
     from src.outputs.sheets import GoogleSheetsWriter  # type: ignore
@@ -540,7 +545,7 @@ def export_metric_snapshot_to_sheet(
     log("[INFO] 正在准备 Google Sheets 认证...")
     writer = GoogleSheetsWriter(
         credentials_path=creds,
-        spreadsheet_id=spreadsheet_id,
+        spreadsheet_id=resolved_spreadsheet_id,
         env_file=env_file,
     )
     log("[INFO] Google Sheets 认证完成")

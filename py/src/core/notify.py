@@ -12,14 +12,14 @@ from .config import AppConfig
 
 
 class Notifier(Protocol):
-    def notify(self, title: str, body: str, *, level: str = "INFO") -> None: ...
+    def notify(self, title: str, body: str, *, level: str = "INFO", group: str | None = None) -> None: ...
 
 
 @dataclass
 class ConsoleNotifier:
     logger: logging.Logger
 
-    def notify(self, title: str, body: str, *, level: str = "INFO") -> None:
+    def notify(self, title: str, body: str, *, level: str = "INFO", group: str | None = None) -> None:
         text = f"[{level}] {title}: {body}"
         getattr(self.logger, level.lower(), self.logger.info)(text)
 
@@ -31,11 +31,11 @@ class BarkNotifier:
     device_key: str | None = None
     logger: logging.Logger | None = None
 
-    def notify(self, title: str, body: str, *, level: str = "INFO") -> None:
+    def notify(self, title: str, body: str, *, level: str = "INFO", group: str | None = None) -> None:
         payload = {
             "title": title,
             "body": body,
-            "group": self.group or "macro-signals",
+            "group": group or self.group or "macro-signals",
             "level": level.lower(),
         }
         url = self._build_url(payload)
@@ -64,9 +64,9 @@ class BarkNotifier:
 class MultiNotifier:
     notifiers: list[Notifier]
 
-    def notify(self, title: str, body: str, *, level: str = "INFO") -> None:
+    def notify(self, title: str, body: str, *, level: str = "INFO", group: str | None = None) -> None:
         for notifier in self.notifiers:
-            notifier.notify(title, body, level=level)
+            notifier.notify(title, body, level=level, group=group)
 
 def _resolve_bark_base_url(bark_url: str, device_key: str | None) -> str | None:
     """把 Bark 配置整理成最终可请求的 base url。"""

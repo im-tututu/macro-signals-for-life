@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
@@ -116,8 +117,17 @@ class RunContext:
             self.logger.info("[%s] %s", status, message)
             if detail:
                 self.logger.info(detail)
+        disable_success_bark = os.getenv("MSFL_DISABLE_SUCCESS_BARK", "").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+        should_notify = (not self.dry_run or status != "success") and not (
+            status == "success" and disable_success_bark
+        )
         # dry-run 成功时不发外部通知，避免本地演练反复触发 Bark。
-        if self.notifier and (not self.dry_run or status != "success"):
+        if self.notifier and should_notify:
             title = f"{self.job_name} {'DRY-RUN' if self.dry_run else status.upper()}"
             self.notifier.notify(title, message, level="INFO" if status == "success" else "WARNING")
         self._finished = True
